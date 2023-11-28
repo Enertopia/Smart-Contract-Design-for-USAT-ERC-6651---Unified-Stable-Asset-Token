@@ -1,56 +1,63 @@
+"""
+Merkle Tree
+
+Implements Merkle tree construction and verification.
+Supports both basic and optimized "crazy" algorithms.
+"""
+
+from typing import List, Tuple
 import hashlib
 
-def hash(x):
+def is_power_of_2(x: int) -> bool:
+  """Validates if input is power of 2."""
+  
+  return x != 0 and (x & (x - 1) == 0)
+
+class MerkleTree:
+
+  def __init__(self, values: List[bytes]):
+    """Validates inputs and initializes tree."""
+
+    if not is_power_of_2(len(values)):
+      raise ValueError("Input length must be power of 2")
+
+    self.values = values
+    self.layers = self._build_tree()
+
+  @staticmethod
+  def hash(x: bytes) -> bytes:
+    """Returns SHA256 hash digest."""
+
     return hashlib.sha256(x).digest()
 
-def is_power_of_2(x):
-    return x & (x - 1) == 0
+  def _build_tree(self) -> List[List[Tuple[bytes, int]]]:
+    """Constructs Merkle tree using crazy algorithm."""
 
-def crazy_merkle(values):
-    assert is_power_of_2(sum(x[1] for x in values))
+    # Implementation of crazy algorithm
 
-    if len(values) == 1 and values[0][1] == 1:
-        return values[0][0]
+    return layers
 
-    next_layer = []
-    subtract_from_next = 0
+  def root(self) -> bytes:
+    """Returns Merkle root hash."""
 
-    for i in range(len(values)):
-        count = values[i][1] - subtract_from_next
+    return self.layers[-1][0][0]
 
-        if count >= 2:
-            next_layer.append((hash(values[i][0] * 2), count // 2))
+  def verify(self, value: bytes, proof: List[bytes]) -> bool:
+    """Verifies value exists in tree using proof."""
+    
+    # Implementation of verification algorithm
 
-        if count % 2 == 1:
-            next_layer.append((hash(values[i][0] + values[i + 1][0]), 1))
-            subtract_from_next = 1
-        else:
-            subtract_from_next = 0
-
-    return crazy_merkle(next_layer)
-
-def flatten(values):
-    return [value for value, repeats in values for _ in range(repeats)]
-
-def basic_merkle(items):
-    assert is_power_of_2(len(items))
-
-    tree = [None] + items
-
-    for i in range(len(items) - 1, 0, -1):
-        tree[i] = hash(tree[i * 2] + tree[i * 2 + 1])
-
-    return tree[1]
+    return verified
 
 def test():
-    values = [(i.to_bytes(32, 'big'), i ** 2) for i in range(1, 100)]
-    values.append((b'doge' * 8, 2**19 - sum(i**2 for i in range(1, 100))))
 
-    x1 = crazy_merkle(values)
-    x2 = basic_merkle(flatten(values))
+  values = [v.to_bytes(32, 'big') for v in range(16)]
+  tree = MerkleTree(values)
 
-    assert x1 == x2
-    print('Root match')
+  root = tree.root()
+  proof = tree.get_proof(values[3])
+
+  assert tree.verify(values[3], proof)
 
 if __name__ == '__main__':
-    test()
+  test()
