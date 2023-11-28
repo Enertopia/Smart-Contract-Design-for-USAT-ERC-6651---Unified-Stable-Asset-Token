@@ -2,48 +2,59 @@ import logging
 import configparser
 from web3 import Web3
 from bitcoinlib.wallets import HDWallet 
-from bitcoinlib.keys import HDKey
 from bitcoinlib.transactions import Transaction 
 
 logger = logging.getLogger(__name__)  
 
 class BlockchainBridge:
 
-    def __init__(self, btc_wallet):
-        """Initialize the BlockchainBridge"""
+    def __init__(self, btc_wallet, chainlink_oracles):
+        """Initialize the BlockchainBridge.
 
-        # Load configuration 
-        config = self._load_configuration()
-
-        # Ethereum and Bitcoin attributes
+        Args:
+            btc_wallet: Instance of the Bitcoin wallet.
+            chainlink_oracles: Instance of Chainlink oracles.
+        """
         self.btc_wallet = btc_wallet  
-        self.eth_provider = config['ETH']['provider']
-        self.eth_contract_address = config['ETH']['contract_address']
-        self.min_transfer_amount = float(config['Bridge']['min_transfer_amount'])
-
-        # Connections 
-        self.eth_web3 = Web3(Web3.HTTPProvider(self.eth_provider))
-        self.eth_contract = self._load_eth_contract()  
+        self.chainlink_oracles = chainlink_oracles
+        self._load_configuration()
 
     def _load_configuration(self):
-        """Load configuration settings from config.ini"""
-        config = configparser.ConfigParser()
-        config.read('./config.ini')
-        return config
+        """Load configuration settings from config.ini."""
+        try:
+            config = configparser.ConfigParser()
+            config.read('./config.ini')
+
+            # Ethereum and Bitcoin attributes
+            self.eth_provider = config['ETH']['provider']
+            self.eth_contract_address = config['ETH']['contract_address']
+            self.min_transfer_amount = float(config['Bridge']['min_transfer_amount'])
+
+            # Connections 
+            self.eth_web3 = Web3(Web3.HTTPProvider(self.eth_provider))
+            self.eth_contract = self._load_eth_contract()
+
+        except Exception as e:
+            logger.error(f"Error loading configuration: {e}")
+            raise
 
     def _load_eth_contract(self):
-        """Load Ethereum contract abstraction"""
-        # Implementation needed based on your contract loading logic
+        """Load Ethereum contract abstraction.
+
+        Returns:
+            EthereumContract: Loaded Ethereum contract abstraction.
+        """
+        # Placeholder: Implement based on your contract loading logic
         pass
 
     def send_eth_to_btc(self, amount):
-        """Send ETH to BTC
+        """Send ETH to BTC.
 
         Transfers the given ETH amount by constructing 
         and broadcasting a BTC transaction.
 
         Args:
-            amount: The ETH amount
+            amount (float): The ETH amount.
         """
         try:
             # Input validation
@@ -56,13 +67,24 @@ class BlockchainBridge:
             # Broadcast the signed BTC transaction
             self.btc_wallet.broadcast(btc_txn)
 
-        except BridgeError as e:
-            logger.warning(e)
+            # Additional features
+            self._utilize_ccip_for_secure_data_transfer()
+            self._integrate_chainlink_oracles_for_data_feeds()
+
+        except (ValueError, BridgeError) as e:
+            logger.warning(str(e))
         except Exception as e:   
             logger.exception("Error transferring funds")
 
     def _create_and_sign_btc_transaction(self, amount):
-        """Create and sign a BTC transaction"""
+        """Create and sign a BTC transaction.
+
+        Args:
+            amount (float): The BTC amount.
+
+        Returns:
+            bitcoinlib.transactions.Transaction: Signed BTC transaction.
+        """
         # Construct the BTC transaction
         btc_txn = self._create_btc_transaction(amount)
         
@@ -72,16 +94,45 @@ class BlockchainBridge:
         return signed_txn
 
     def _create_btc_transaction(self, amount):
-        """Create a BTC transaction"""
-        # Placeholder logic - Implement based on your requirements
+        """Create a BTC transaction.
+
+        Args:
+            amount (float): The BTC amount.
+
+        Returns:
+            bitcoinlib.transactions.Transaction: Constructed BTC transaction.
+        """
+        # Placeholder: Implement based on your requirements
         btc_txn = Transaction()
         # Construct the transaction...
         return btc_txn
 
     def _sign_btc_transaction(self, btc_txn):
-        """Sign a BTC transaction"""
-        # Placeholder logic - Implement based on your BTC wallet and signing requirements
+        """Sign a BTC transaction.
+
+        Args:
+            btc_txn (bitcoinlib.transactions.Transaction): BTC transaction to sign.
+
+        Returns:
+            bitcoinlib.transactions.Transaction: Signed BTC transaction.
+        """
+        # Placeholder: Implement based on your BTC wallet and signing requirements
         signed_txn = btc_txn  # Update with actual signing logic
         return signed_txn
 
+    def _utilize_ccip_for_secure_data_transfer(self):
+        """Utilize CCIP for secure and reliable data transfer.
+
+        Placeholder: Implement based on your requirements and CCIP integration.
+        """
+        pass
+
+    def _integrate_chainlink_oracles_for_data_feeds(self):
+        """Integrate Chainlink oracles for real-time data feeds.
+
+        Placeholder: Implement based on your requirements and Chainlink integration.
+        """
+        pass
+
 # Copyright (c) 2023 Emiliano German Solazzi Griminger. All rights reserved.
+
