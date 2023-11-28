@@ -1,0 +1,139 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2023 Emiliano German Solazzi Griminger. All rights reserved.
+
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/security/Pausable.sol";
+import "@openzeppelin/contracts/utils/Counters.sol";
+import "@openzeppelin/contracts/utils/Context.sol";
+
+/**
+ * @title USAT: Unified Stable Asset Token
+ * @dev ERC-721 compliant token representing USAT with additional attributes.
+ */
+contract USAT is ERC721Enumerable, Ownable, Pausable {
+    using Counters for Counters.Counter;
+    Counters.Counter private _tokenIdCounter;
+
+    // Additional attributes for USAT
+    struct TokenAttributes {
+        string cash;
+        string insurance;
+        string stateOfTitle;
+        address custodian;
+        uint256 reputationScore;
+        uint256 esgScore;
+    }
+
+    mapping(uint256 => TokenAttributes) private _tokenAttributes;
+
+    event TokenMinted(address indexed to, uint256 indexed tokenId, TokenAttributes attributes);
+
+    /**
+     * @dev Constructor sets the name and symbol of the ERC-721 token.
+     */
+    constructor() ERC721("Unified Stable Asset Token", "USAT") {}
+
+    /**
+     * @dev Mint a new USAT token.
+     * @param to The address to receive the minted token.
+     * @param attributes Additional attributes for the USAT token.
+     */
+    function mint(address to, TokenAttributes calldata attributes) external onlyOwner whenNotPaused {
+        uint256 tokenId = _tokenIdCounter.current();
+        _mint(to, tokenId);
+        _tokenIdCounter.increment();
+
+        // Set additional attributes
+        _tokenAttributes[tokenId] = attributes;
+
+        emit TokenMinted(to, tokenId, attributes);
+    }
+
+    /**
+     * @dev Get the attributes of a specific USAT token.
+     * @param tokenId The ID of the USAT token.
+     * @return TokenAttributes Additional attributes of the specified token.
+     */
+    function getTokenAttributes(uint256 tokenId) external view returns (TokenAttributes memory) {
+        return _tokenAttributes[tokenId];
+    }
+
+    /**
+     * @dev Pause all token-related functions in case of emergencies.
+     * Only the owner can pause and unpause the contract.
+     */
+    function pause() external onlyOwner {
+        _pause();
+    }
+
+    /**
+     * @dev Unpause all token-related functions.
+     * Only the owner can pause and unpause the contract.
+     */
+    function unpause() external onlyOwner {
+        _unpause();
+    }
+
+    /**
+     * @dev Override the _baseURI function to provide a base URI for token metadata.
+     */
+    function _baseURI() internal view virtual override returns (string memory) {
+        return "https://api.example.com/metadata/";
+    }
+}
+
+/**
+ * @title UTXOSystem: UTXO System Implementation
+ * @dev Implements a UTXO system with basic features.
+ */
+contract UTXOSystem is Ownable, Pausable {
+    using SafeMath for uint256;
+
+    // UTXO struct with additional details
+    struct UTXO {
+        uint256 id;
+        address owner;
+        string details;
+        // Other UTXO details...
+    }
+
+    mapping(uint256 => UTXO) public utxos;
+    uint256 private _utxoIdCounter;
+
+    event UTXOCreated(address indexed owner, uint256 indexed utxoId, string details);
+
+    /**
+     * @dev Constructor initializes the UTXO counter.
+     */
+    constructor() {
+        _utxoIdCounter = 1;
+    }
+
+    /**
+     * @dev Create a new UTXO.
+     * @param details Additional details about the UTXO.
+     */
+    function createUTXO(string calldata details) external whenNotPaused {
+        uint256 utxoId = _utxoIdCounter;
+        utxos[utxoId] = UTXO(utxoId, _msgSender(), details);
+        _utxoIdCounter++;
+
+        emit UTXOCreated(_msgSender(), utxoId, details);
+    }
+
+    /**
+     * @dev Spend a UTXO.
+     * @param utxoId The ID of the UTXO to spend.
+     */
+    function spendUTXO(uint256 utxoId) external onlyOwner whenNotPaused {
+        // Implement logic to spend UTXO
+        require(utxos[utxoId].owner == _msgSender(), "Not the owner");
+        delete utxos[utxoId];
+        // Other spend logic...
+
+        // Emit an event or perform other actions
+    }
+}
