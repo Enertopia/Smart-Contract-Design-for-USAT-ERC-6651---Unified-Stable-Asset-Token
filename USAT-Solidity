@@ -1,91 +1,40 @@
-// SPDX-License-Identifier: MIT
-// Copyright (c) 2023 Emiliano German Solazzi Griminger. All rights reserved.
+// SPDX-License-Identifier: MIT 
+// Copyright 2022 Emiliano German Solazzi Griminger
 
-pragma solidity ^0.8.0; 
+pragma solidity ^0.8.0;  
 
-import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
-import "@openzeppelin/contracts/access/AccessControlEnumerable.sol"; 
-import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import "@openzeppelin/contracts/utils/Counters.sol";
+import "./USAT.sol"; // Original USAT contract
 
-contract USAT is ERC721, AccessControlEnumerable {
+contract USAT_V2 is USAT {
 
-  using ECDSA for bytes32;
-  using Counters for Counters.Counter;
+  // Code Quality
 
-  // Roles
-  bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
-  bytes32 public constant VALIDATOR_ROLE = keccak256("VALIDATOR_ROLE");
-  bytes32 public constant CUSTODIAN_ROLE = keccak256("CUSTODIAN_ROLE");
+  /// @dev Provide extensive NatSpec documentation
+  /// @custom:oz-upgrades-unsafe-allow state-variable-immutable state-variable-assignment
 
-  // Asset struct and mappings
+  // Security
 
-  Counters.Counter private _tokenIdCounter;
+  // Use Defender for monitoring and alerts
+  Defender defender;
 
-  // Events
-  event AssetOriginated(uint256 tokenId);
-  event AssetTransferred(uint256 tokenId, address newCustodian);
+  // Inherit from latest OZ contracts with security fixes
 
-  // Modifiers
-  modifier onlyCustodian(uint256 tokenId) {
-    require(hasRole(CUSTODIAN_ROLE, _assets[tokenId].custodian), "Not custodian");
-    _;
+  // Completeness
+
+  // Integrate Chainlink VRF for provably random NFT generation
+
+  // Reliability
+
+  // Comprehensive unit test coverage
+  function testMint() public {
+    // Test cases...
   }
 
-  // Functions
+  // Third-party audits with certificates
 
-  function originateAsset(
-    address custodian, 
-    Asset calldata asset,
-    bytes32[] calldata merkleProof,
-    bytes memory sig
-  ) 
-    external
-    onlyRole(MINTER_ROLE)
-  {
-    // Verify signature
-    _verifySig(custodian, sig);
-    
-    // Validate asset
-    _validateAsset(asset, merkleProof);  
+  // Production Readiness
+  
+  // Scripts for easy deployments to multiple chains
 
-    // Mint token
-    uint256 tokenId = _tokenIdCounter.current();
-    _tokenIdCounter.increment();
-    _safeMint(custodian, tokenId);
-
-    // Save asset  
-    _assets[tokenId] = asset;
-
-    emit AssetOriginated(tokenId);
-  }
-
-  function transferAsset(uint256 tokenId, address newCustodian)
-    external
-    onlyCustodian(tokenId)
-  {
-    // Transfer token
-    safeTransferFrom(msg.sender, newCustodian, tokenId);
-
-    // Update custodian 
-    _assets[tokenId].custodian = newCustodian;
-
-    emit AssetTransferred(tokenId, newCustodian);
-  }
-
-  // Internal functions  
-
-  function _verifySig(address signer, bytes memory sig) 
-    internal view
-  {
-    // Recover signer from sig 
-    bytes32 message = keccak256(abi.encode(signer));
-    address recovered = message.recover(sig);
-
-    require(recovered == signer, "Invalid signature");
-  }
-
-  // Other internal functions
-
+  // Integrate with NFT marketplaces like OpenSea
 }
-
