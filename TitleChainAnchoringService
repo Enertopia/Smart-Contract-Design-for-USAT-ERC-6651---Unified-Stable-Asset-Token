@@ -1,0 +1,69 @@
+import json
+from web3 import Web3
+
+class TitleChainAnchoringService:
+    def __init__(self, web3, contract_address, abi):
+        """
+        Initialize the TitleChainAnchoringService instance.
+
+        :param web3: Web3 instance for interacting with the blockchain.
+        :param contract_address: Address of the smart contract on the blockchain.
+        :param abi: ABI (Application Binary Interface) of the smart contract.
+        """
+        self.web3 = web3
+        self.contract = self.web3.eth.contract(address=contract_address, abi=abi)
+
+    def get_batches(self):
+        """
+        Retrieve batches of transactions from an off-chain system.
+
+        Placeholder method. Implement logic to fetch batches from an off-chain source.
+        """
+        # Placeholder logic to fetch batches
+        batches = []
+        return batches
+
+    def batch_and_send_transactions(self, transactions):
+        """
+        Batch multiple transactions and send them in a single transaction.
+
+        :param transactions: List of transactions to be batched.
+        """
+        try:
+            if not transactions:
+                raise ValueError("No transactions provided.")
+
+            # Construct a list of transaction hashes
+            transaction_hashes = [self.hash_transaction(tx) for tx in transactions]
+
+            if not all(transaction_hashes):
+                raise ValueError("Error hashing one or more transactions.")
+
+            # Anchor batches on the blockchain
+            self.contract.functions.anchorBatches(transaction_hashes).transact({"from": self.web3.eth.default_account})
+
+            print(f"Anchored {len(transactions)} transactions to TitleChain in a single batch")
+
+        except Exception as e:
+            print(f"Error anchoring transactions: {e}")
+
+    def hash_transaction(self, transaction):
+        """
+        Compute the hash of a transaction.
+
+        :param transaction: Transaction data.
+        :return: Hash of the transaction.
+        """
+        try:
+            if not transaction:
+                raise ValueError("Empty transaction provided.")
+
+            # Serialize the transaction to JSON and compute its keccak256 hash
+            transaction_json = json.dumps(transaction)
+            transaction_hash = Web3.keccak(text=transaction_json)
+            return transaction_hash
+        except Exception as e:
+            print(f"Error hashing transaction: {e}")
+            return None
+
+# Copyright © 2023 Emiliano German Solazzi Griminger. All rights reserved.
