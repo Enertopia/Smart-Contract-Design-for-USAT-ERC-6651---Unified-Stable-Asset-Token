@@ -23,16 +23,17 @@ contract RenewableCreditToken is ERC20, Ownable {
     }
 
     // UTXO struct for each issuance
-    struct UTXO {
+    struct RenewableCreditUTXO {
         uint256 utxoId;
         uint256 tokenId;
         // Add more UTXO attributes as needed...
     }
 
     mapping(uint256 => RenewableCredit) private _renewableCreditAttributes;
-    mapping(uint256 => UTXO) private _utxos;
+    mapping(uint256 => RenewableCreditUTXO) public UTXOs;
 
-    event RenewableCreditMinted(address indexed to, uint256 amount, RenewableCredit attributes, UTXO utxo);
+    event RenewableCreditMinted(address indexed to, uint256 amount, RenewableCredit attributes, RenewableCreditUTXO utxo);
+    event UTXORetired(uint256 indexed utxoId);
 
     /**
      * @dev Constructor sets the name and symbol of the ERC-20 token.
@@ -58,12 +59,24 @@ contract RenewableCreditToken is ERC20, Ownable {
         // Create a new UTXO for each issuance
         uint256 utxoId = _utxoCounter.current();
         _utxoCounter.increment();
-        _utxos[utxoId] = UTXO(utxoId, amount);
+        UTXOs[utxoId] = RenewableCreditUTXO(utxoId, amount);
 
         // Set additional attributes for the RenewableCreditToken
         _renewableCreditAttributes[utxoId] = attributes;
 
-        emit RenewableCreditMinted(to, amount, attributes, _utxos[utxoId]);
+        emit RenewableCreditMinted(to, amount, attributes, UTXOs[utxoId]);
+    }
+
+    /**
+     * @dev Retire a RenewableCreditToken UTXO.
+     * @param utxoId The UTXO ID to retire.
+     */
+    function retireUTXO(uint256 utxoId) external onlyOwner {
+        // Logic for retiring the renewable credit UTXO...
+        // You may want to perform additional checks or actions before retiring the UTXO.
+
+        // Emit event for UTXO retirement
+        emit UTXORetired(utxoId);
     }
 
     /**
@@ -78,9 +91,9 @@ contract RenewableCreditToken is ERC20, Ownable {
     /**
      * @dev Get the UTXO information for a specific RenewableCreditToken.
      * @param utxoId The UTXO ID of the RenewableCreditToken.
-     * @return UTXO UTXO information of the specified token.
+     * @return RenewableCreditUTXO UTXO information of the specified token.
      */
-    function getUTXO(uint256 utxoId) external view returns (UTXO memory) {
-        return _utxos[utxoId];
+    function getUTXO(uint256 utxoId) external view returns (RenewableCreditUTXO memory) {
+        return UTXOs[utxoId];
     }
 }
