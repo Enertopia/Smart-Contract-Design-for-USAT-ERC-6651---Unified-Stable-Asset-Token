@@ -1,0 +1,63 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2023 Emiliano German Solazzi Griminger. All rights reserved.
+
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/Counters.sol";
+
+/**
+ * @title RenewableCreditToken: ERC-6651 compliant token representing a renewable credit.
+ * @dev This contract allows the minting of Renewable Credit Tokens with specific attributes.
+ */
+contract RenewableCreditToken is ERC721Enumerable, Ownable {
+    using Counters for Counters.Counter;
+    Counters.Counter private _tokenIdCounter;
+
+    // Additional attributes for the RenewableCreditToken
+    struct RenewableCredit {
+        uint256 assetScore;
+        uint256 esgScore;
+        // Add more attributes as needed...
+    }
+
+    mapping(uint256 => RenewableCredit) private _renewableCreditAttributes;
+
+    event RenewableCreditMinted(address indexed to, uint256 indexed tokenId, RenewableCredit attributes);
+
+    /**
+     * @dev Constructor sets the name and symbol of the ERC-721 token.
+     */
+    constructor() ERC721("Renewable Credit Token", "RCT") {}
+
+    /**
+     * @dev Mint a new RenewableCreditToken representing a renewable credit.
+     * @param to The address to receive the minted token.
+     * @param attributes Additional attributes for the renewable credit.
+     */
+    function mintRenewableCredit(address to, RenewableCredit calldata attributes) external onlyOwner {
+        // Input validation
+        require(to != address(0), "Invalid address");
+        require(attributes.assetScore > 0, "Invalid asset score");
+        require(attributes.esgScore > 0, "Invalid ESG score");
+
+        uint256 tokenId = _tokenIdCounter.current();
+        _mint(to, tokenId);
+        _tokenIdCounter.increment();
+
+        // Set additional attributes for the RenewableCreditToken
+        _renewableCreditAttributes[tokenId] = attributes;
+
+        emit RenewableCreditMinted(to, tokenId, attributes);
+    }
+
+    /**
+     * @dev Get the attributes of a specific RenewableCreditToken.
+     * @param tokenId The ID of the RenewableCreditToken.
+     * @return RenewableCredit Additional attributes of the specified token.
+     */
+    function getRenewableCreditAttributes(uint256 tokenId) external view returns (RenewableCredit memory) {
+        return _renewableCreditAttributes[tokenId];
+    }
+}
