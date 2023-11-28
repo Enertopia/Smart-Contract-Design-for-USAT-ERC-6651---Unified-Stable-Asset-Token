@@ -1,0 +1,87 @@
+import logging
+import configparser
+from web3 import Web3
+from bitcoinlib.wallets import HDWallet 
+from bitcoinlib.keys import HDKey
+from bitcoinlib.transactions import Transaction 
+
+logger = logging.getLogger(__name__)  
+
+class BlockchainBridge:
+
+    def __init__(self, btc_wallet):
+        """Initialize the BlockchainBridge"""
+
+        # Load configuration 
+        config = self._load_configuration()
+
+        # Ethereum and Bitcoin attributes
+        self.btc_wallet = btc_wallet  
+        self.eth_provider = config['ETH']['provider']
+        self.eth_contract_address = config['ETH']['contract_address']
+        self.min_transfer_amount = float(config['Bridge']['min_transfer_amount'])
+
+        # Connections 
+        self.eth_web3 = Web3(Web3.HTTPProvider(self.eth_provider))
+        self.eth_contract = self._load_eth_contract()  
+
+    def _load_configuration(self):
+        """Load configuration settings from config.ini"""
+        config = configparser.ConfigParser()
+        config.read('./config.ini')
+        return config
+
+    def _load_eth_contract(self):
+        """Load Ethereum contract abstraction"""
+        # Implementation needed based on your contract loading logic
+        pass
+
+    def send_eth_to_btc(self, amount):
+        """Send ETH to BTC
+
+        Transfers the given ETH amount by constructing 
+        and broadcasting a BTC transaction.
+
+        Args:
+            amount: The ETH amount
+        """
+        try:
+            # Input validation
+            if amount < self.min_transfer_amount:
+                raise ValueError(f"Amount below the minimum transfer amount of {self.min_transfer_amount} ETH.")
+
+            # Main bridge logic  
+            btc_txn = self._create_and_sign_btc_transaction(amount)
+            
+            # Broadcast the signed BTC transaction
+            self.btc_wallet.broadcast(btc_txn)
+
+        except BridgeError as e:
+            logger.warning(e)
+        except Exception as e:   
+            logger.exception("Error transferring funds")
+
+    def _create_and_sign_btc_transaction(self, amount):
+        """Create and sign a BTC transaction"""
+        # Construct the BTC transaction
+        btc_txn = self._create_btc_transaction(amount)
+        
+        # Sign the BTC transaction
+        signed_txn = self._sign_btc_transaction(btc_txn)
+
+        return signed_txn
+
+    def _create_btc_transaction(self, amount):
+        """Create a BTC transaction"""
+        # Placeholder logic - Implement based on your requirements
+        btc_txn = Transaction()
+        # Construct the transaction...
+        return btc_txn
+
+    def _sign_btc_transaction(self, btc_txn):
+        """Sign a BTC transaction"""
+        # Placeholder logic - Implement based on your BTC wallet and signing requirements
+        signed_txn = btc_txn  # Update with actual signing logic
+        return signed_txn
+
+# Copyright (c) 2023 Emiliano German Solazzi Griminger. All rights reserved.
