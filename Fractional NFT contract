@@ -1,0 +1,80 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+
+/**
+ * @title FractionalNFT
+ * @dev ERC-721 contract for fractionalizing an ERC-6551 token (e.g., USAT).
+ */
+contract FractionalNFT is ERC721, Ownable {
+    IERC20 private usatToken;
+    uint256 private originalNFTTokenId;
+
+    event NFTFractionalized(address indexed owner, uint256 fractions);
+
+    /**
+     * @dev Constructor to initialize the fractionalized NFT contract.
+     * @param _name The name of the fractionalized NFT.
+     * @param _symbol The symbol of the fractionalized NFT.
+     * @param _usatToken Address of the ERC-20 token (e.g., USAT) contract.
+     * @param _originalNFTTokenId The token ID of the original NFT.
+     */
+    constructor(
+        string memory _name,
+        string memory _symbol,
+        address _usatToken,
+        uint256 _originalNFTTokenId
+    ) ERC721(_name, _symbol) {
+        usatToken = IERC20(_usatToken);
+        originalNFTTokenId = _originalNFTTokenId;
+    }
+
+    /**
+     * @dev Modifier to restrict functions to the owner of the original NFT.
+     */
+    modifier onlyOriginalNFTOwner() {
+        require(
+            usatToken.ownerOf(originalNFTTokenId) == msg.sender,
+            "FractionalNFT: Caller is not the owner of the original NFT"
+        );
+        _;
+    }
+
+    /**
+     * @dev Tokenize the original NFT into fractions.
+     * @param fractions Number of fractions to create.
+     */
+    function tokenizeNFT(uint256 fractions) external onlyOriginalNFTOwner {
+        for (uint256 i = 0; i < fractions; i++) {
+            _mint(msg.sender, totalSupply() + 1);
+        }
+
+        // Transfer the original NFT to this contract
+        usatToken.transferFrom(msg.sender, address(this), originalNFTTokenId);
+
+        emit NFTFractionalized(msg.sender, fractions);
+    }
+
+    // Additional governance and trading functions...
+
+    /**
+     * @dev Functionality for interacting with the original NFT (example).
+     * Only the owner of the original NFT can call this function.
+     */
+    function interactWithOriginalNFT() external onlyOriginalNFTOwner {
+        // Implement the logic for interacting with the original NFT here
+    }
+
+    // Optional: Add more professional and secure functionality...
+
+    /**
+     * @dev Override the Ownable function to prevent potential vulnerabilities.
+     * @param newOwner Address of the new owner.
+     */
+    function transferOwnership(address newOwner) public override onlyOwner {
+        revert("FractionalNFT: Ownership cannot be transferred");
+    }
+}
