@@ -3,17 +3,17 @@
 
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
 
 /**
- * @title RenewableCreditToken: ERC-6651 compliant token representing a renewable credit.
- * @dev This contract allows the minting of Renewable Credit Tokens with specific attributes.
+ * @title RenewableCreditToken: ERC-20 compliant token representing renewable credits with UTXO model.
+ * @dev This contract allows the minting of Renewable Credit Tokens with specific attributes and a UTXO-like model.
  */
-contract RenewableCreditToken is ERC721Enumerable, Ownable {
+contract RenewableCreditToken is ERC20, Ownable {
     using Counters for Counters.Counter;
-    Counters.Counter private _tokenIdCounter;
+    Counters.Counter private _utxoCounter;
 
     // Additional attributes for the RenewableCreditToken
     struct RenewableCredit {
@@ -22,42 +22,65 @@ contract RenewableCreditToken is ERC721Enumerable, Ownable {
         // Add more attributes as needed...
     }
 
+    // UTXO struct for each issuance
+    struct UTXO {
+        uint256 utxoId;
+        uint256 tokenId;
+        // Add more UTXO attributes as needed...
+    }
+
     mapping(uint256 => RenewableCredit) private _renewableCreditAttributes;
+    mapping(uint256 => UTXO) private _utxos;
 
-    event RenewableCreditMinted(address indexed to, uint256 indexed tokenId, RenewableCredit attributes);
+    event RenewableCreditMinted(address indexed to, uint256 amount, RenewableCredit attributes, UTXO utxo);
 
     /**
-     * @dev Constructor sets the name and symbol of the ERC-721 token.
+     * @dev Constructor sets the name and symbol of the ERC-20 token.
      */
-    constructor() ERC721("Renewable Credit Token", "RCT") {}
+    constructor() ERC20("Renewable Credit Token", "RCT") {}
 
     /**
-     * @dev Mint a new RenewableCreditToken representing a renewable credit.
-     * @param to The address to receive the minted token.
+     * @dev Mint a new RenewableCreditToken with UTXO representation.
+     * @param to The address to receive the minted tokens.
+     * @param amount The amount of tokens to mint.
      * @param attributes Additional attributes for the renewable credit.
      */
-    function mintRenewableCredit(address to, RenewableCredit calldata attributes) external onlyOwner {
+    function mintRenewableCredit(address to, uint256 amount, RenewableCredit calldata attributes) external onlyOwner {
         // Input validation
         require(to != address(0), "Invalid address");
+        require(amount > 0, "Invalid amount");
         require(attributes.assetScore > 0, "Invalid asset score");
         require(attributes.esgScore > 0, "Invalid ESG score");
 
-        uint256 tokenId = _tokenIdCounter.current();
-        _mint(to, tokenId);
-        _tokenIdCounter.increment();
+        // Mint new tokens
+        _mint(to, amount);
+
+        // Create a new UTXO for each issuance
+        uint256 utxoId = _utxoCounter.current();
+        _utxoCounter.increment();
+        _utxos[utxoId] = UTXO(utxoId, amount);
 
         // Set additional attributes for the RenewableCreditToken
-        _renewableCreditAttributes[tokenId] = attributes;
+        _renewableCreditAttributes[utxoId] = attributes;
 
-        emit RenewableCreditMinted(to, tokenId, attributes);
+        emit RenewableCreditMinted(to, amount, attributes, _utxos[utxoId]);
     }
 
     /**
      * @dev Get the attributes of a specific RenewableCreditToken.
-     * @param tokenId The ID of the RenewableCreditToken.
+     * @param utxoId The UTXO ID of the RenewableCreditToken.
      * @return RenewableCredit Additional attributes of the specified token.
      */
-    function getRenewableCreditAttributes(uint256 tokenId) external view returns (RenewableCredit memory) {
-        return _renewableCreditAttributes[tokenId];
+    function getRenewableCreditAttributes(uint256 utxoId) external view returns (RenewableCredit memory) {
+        return _renewableCreditAttributes[utxoId];
+    }
+
+    /**
+     * @dev Get the UTXO information for a specific RenewableCreditToken.
+     * @param utxoId The UTXO ID of the RenewableCreditToken.
+     * @return UTXO UTXO information of the specified token.
+     */
+    function getUTXO(uint256 utxoId) external view returns (UTXO memory) {
+        return _utxos[utxoId];
     }
 }
