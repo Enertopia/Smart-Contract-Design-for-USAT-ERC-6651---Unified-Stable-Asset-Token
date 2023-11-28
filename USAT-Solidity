@@ -1,139 +1,91 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2023 Emiliano German Solazzi Griminger. All rights reserved.
 
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.0; 
 
-import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/security/Pausable.sol";
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/access/AccessControlEnumerable.sol"; 
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
-import "@openzeppelin/contracts/utils/Context.sol";
 
-/**
- * @title USAT: Unified Stable Asset Token
- * @dev ERC-721 compliant token representing USAT with additional attributes.
- */
-contract USAT is ERC721Enumerable, Ownable, Pausable {
-    using Counters for Counters.Counter;
-    Counters.Counter private _tokenIdCounter;
+contract USAT is ERC721, AccessControlEnumerable {
 
-    // Additional attributes for USAT
-    struct TokenAttributes {
-        string cash;
-        string insurance;
-        string stateOfTitle;
-        address custodian;
-        uint256 reputationScore;
-        uint256 esgScore;
-    }
+  using ECDSA for bytes32;
+  using Counters for Counters.Counter;
 
-    mapping(uint256 => TokenAttributes) private _tokenAttributes;
+  // Roles
+  bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
+  bytes32 public constant VALIDATOR_ROLE = keccak256("VALIDATOR_ROLE");
+  bytes32 public constant CUSTODIAN_ROLE = keccak256("CUSTODIAN_ROLE");
 
-    event TokenMinted(address indexed to, uint256 indexed tokenId, TokenAttributes attributes);
+  // Asset struct and mappings
 
-    /**
-     * @dev Constructor sets the name and symbol of the ERC-721 token.
-     */
-    constructor() ERC721("Unified Stable Asset Token", "USAT") {}
+  Counters.Counter private _tokenIdCounter;
 
-    /**
-     * @dev Mint a new USAT token.
-     * @param to The address to receive the minted token.
-     * @param attributes Additional attributes for the USAT token.
-     */
-    function mint(address to, TokenAttributes calldata attributes) external onlyOwner whenNotPaused {
-        uint256 tokenId = _tokenIdCounter.current();
-        _mint(to, tokenId);
-        _tokenIdCounter.increment();
+  // Events
+  event AssetOriginated(uint256 tokenId);
+  event AssetTransferred(uint256 tokenId, address newCustodian);
 
-        // Set additional attributes
-        _tokenAttributes[tokenId] = attributes;
+  // Modifiers
+  modifier onlyCustodian(uint256 tokenId) {
+    require(hasRole(CUSTODIAN_ROLE, _assets[tokenId].custodian), "Not custodian");
+    _;
+  }
 
-        emit TokenMinted(to, tokenId, attributes);
-    }
+  // Functions
 
-    /**
-     * @dev Get the attributes of a specific USAT token.
-     * @param tokenId The ID of the USAT token.
-     * @return TokenAttributes Additional attributes of the specified token.
-     */
-    function getTokenAttributes(uint256 tokenId) external view returns (TokenAttributes memory) {
-        return _tokenAttributes[tokenId];
-    }
+  function originateAsset(
+    address custodian, 
+    Asset calldata asset,
+    bytes32[] calldata merkleProof,
+    bytes memory sig
+  ) 
+    external
+    onlyRole(MINTER_ROLE)
+  {
+    // Verify signature
+    _verifySig(custodian, sig);
+    
+    // Validate asset
+    _validateAsset(asset, merkleProof);  
 
-    /**
-     * @dev Pause all token-related functions in case of emergencies.
-     * Only the owner can pause and unpause the contract.
-     */
-    function pause() external onlyOwner {
-        _pause();
-    }
+    // Mint token
+    uint256 tokenId = _tokenIdCounter.current();
+    _tokenIdCounter.increment();
+    _safeMint(custodian, tokenId);
 
-    /**
-     * @dev Unpause all token-related functions.
-     * Only the owner can pause and unpause the contract.
-     */
-    function unpause() external onlyOwner {
-        _unpause();
-    }
+    // Save asset  
+    _assets[tokenId] = asset;
 
-    /**
-     * @dev Override the _baseURI function to provide a base URI for token metadata.
-     */
-    function _baseURI() internal view virtual override returns (string memory) {
-        return "https://api.example.com/metadata/";
-    }
+    emit AssetOriginated(tokenId);
+  }
+
+  function transferAsset(uint256 tokenId, address newCustodian)
+    external
+    onlyCustodian(tokenId)
+  {
+    // Transfer token
+    safeTransferFrom(msg.sender, newCustodian, tokenId);
+
+    // Update custodian 
+    _assets[tokenId].custodian = newCustodian;
+
+    emit AssetTransferred(tokenId, newCustodian);
+  }
+
+  // Internal functions  
+
+  function _verifySig(address signer, bytes memory sig) 
+    internal view
+  {
+    // Recover signer from sig 
+    bytes32 message = keccak256(abi.encode(signer));
+    address recovered = message.recover(sig);
+
+    require(recovered == signer, "Invalid signature");
+  }
+
+  // Other internal functions
+
 }
 
-/**
- * @title UTXOSystem: UTXO System Implementation
- * @dev Implements a UTXO system with basic features.
- */
-contract UTXOSystem is Ownable, Pausable {
-    using SafeMath for uint256;
-
-    // UTXO struct with additional details
-    struct UTXO {
-        uint256 id;
-        address owner;
-        string details;
-        // Other UTXO details...
-    }
-
-    mapping(uint256 => UTXO) public utxos;
-    uint256 private _utxoIdCounter;
-
-    event UTXOCreated(address indexed owner, uint256 indexed utxoId, string details);
-
-    /**
-     * @dev Constructor initializes the UTXO counter.
-     */
-    constructor() {
-        _utxoIdCounter = 1;
-    }
-
-    /**
-     * @dev Create a new UTXO.
-     * @param details Additional details about the UTXO.
-     */
-    function createUTXO(string calldata details) external whenNotPaused {
-        uint256 utxoId = _utxoIdCounter;
-        utxos[utxoId] = UTXO(utxoId, _msgSender(), details);
-        _utxoIdCounter++;
-
-        emit UTXOCreated(_msgSender(), utxoId, details);
-    }
-
-    /**
-     * @dev Spend a UTXO.
-     * @param utxoId The ID of the UTXO to spend.
-     */
-    function spendUTXO(uint256 utxoId) external onlyOwner whenNotPaused {
-        // Implement logic to spend UTXO
-        require(utxos[utxoId].owner == _msgSender(), "Not the owner");
-        delete utxos[utxoId];
-        // Other spend logic...
-
-        // Emit an event or perform other actions
-    }
-}
