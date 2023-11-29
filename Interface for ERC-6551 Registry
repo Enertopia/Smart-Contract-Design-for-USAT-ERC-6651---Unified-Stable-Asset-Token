@@ -1,0 +1,2 @@
+// Deploy the ERC-6551 Registry contract
+ERC6551Registry registry = new ERC6551Registry();
