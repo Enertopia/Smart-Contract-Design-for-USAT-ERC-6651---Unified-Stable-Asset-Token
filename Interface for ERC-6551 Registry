@@ -1,2 +1,94 @@
-// Deploy the ERC-6551 Registry contract
-ERC6551Registry registry = new ERC6551Registry();
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts/utils/introspection/IERC165.sol";
+import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+import "@openzeppelin/contracts/interfaces/IERC1271.sol";
+import "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
+
+interface IERC6551Account {
+    // Interface for token-bound account functionality
+    // ...
+}
+
+interface IERC6551Executable {
+    // Interface for executing transactions in a token-bound account
+    // ...
+}
+
+contract ERC6551Account is IERC165, IERC1271, IERC6551Account, IERC6551Executable {
+    // State variable to store a counter
+    uint256 public state;
+
+    receive() external payable {}
+
+    // Function to execute transactions
+    function execute(address to, uint256 value, bytes calldata data, uint8 operation)
+        external
+        payable
+        virtual
+        returns (bytes memory result)
+    {
+        _validateSigner();
+        _validateOperation(operation);
+
+        state++;
+
+        (bool success, bytes memory resultData) = to.call{value: value}(data);
+        require(success, "Transaction execution failed");
+
+        return resultData;
+    }
+
+    // Function to check if the sender is a valid signer
+    function isValidSigner(address signer, bytes calldata) external view virtual returns (bytes4) {
+        return _isValidSigner(signer) ? IERC6551Account.isValidSigner.selector : bytes4(0);
+    }
+
+    // Function to check if a signature is valid
+    function isValidSignature(bytes32 hash, bytes memory signature)
+        external
+        view
+        virtual
+        returns (bytes4 magicValue)
+    {
+        require(SignatureChecker.isValidSignatureNow(owner(), hash, signature), "Invalid signature");
+
+        return IERC1271.isValidSignature.selector;
+    }
+
+    // Function to check if the contract supports certain interfaces
+    function supportsInterface(bytes4 interfaceId) external pure virtual returns (bool) {
+        return
+            interfaceId == type(IERC165).interfaceId ||
+            interfaceId == type(IERC6551Account).interfaceId ||
+            interfaceId == type(IERC6551Executable).interfaceId;
+    }
+
+    // Function to get information about the associated token
+    function token() public view virtual returns (uint256, address, uint256) {
+        // Implementation of the token function
+        // ...
+    }
+
+    // Function to get the owner of the associated token
+    function owner() public view virtual returns (address) {
+        // Implementation of the owner function
+        // ...
+    }
+
+    // Internal function to check if a given address is a valid signer
+    function _isValidSigner(address signer) internal view virtual returns (bool) {
+        return signer == owner();
+    }
+
+    // Internal function to validate the signer of a transaction
+    function _validateSigner() internal view {
+        require(_isValidSigner(msg.sender), "Invalid signer");
+    }
+
+    // Internal function to validate the operation type
+    function _validateOperation(uint8 operation) internal pure {
+        require(operation == 0, "Only call operations are supported");
+    }
+}
