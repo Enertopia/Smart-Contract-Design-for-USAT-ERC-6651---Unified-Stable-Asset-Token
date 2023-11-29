@@ -13,7 +13,7 @@ class TitleChainAnchoringService:
         self.web3 = web3
         self.contract = self.web3.eth.contract(address=contract_address, abi=abi)
 
-    def get_batches(self):
+    def fetch_batches_from_off_chain(self):
         """
         Retrieve batches of transactions from an off-chain system.
 
