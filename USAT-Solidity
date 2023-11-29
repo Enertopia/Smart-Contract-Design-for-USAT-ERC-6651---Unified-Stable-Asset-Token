@@ -1,40 +1,61 @@
-// SPDX-License-Identifier: MIT 
-// Copyright 2022 Emiliano German Solazzi Griminger
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
 
-pragma solidity ^0.8.0;  
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/interfaces/IERC1271.sol";
+import "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
 
-import "./USAT.sol"; // Original USAT contract
+interface IERC6551Account {
+    function isValidSigner(address signer, bytes calldata context) external view returns (bytes4 magicValue);
+}
 
-contract USAT_V2 is USAT {
+contract ERC1167Structure {
+    function deployERC1167(
+        address implementation,
+        bytes32 salt,
+        uint256 chainId,
+        address tokenContract,
+        uint256 tokenId
+    ) external returns (address) {
+        address deployed = create2Clone(implementation, salt);
+        return deployed;
+    }
 
-  // Code Quality
+    function create2Clone(address implementation, bytes32 salt) internal returns (address result) {
+        assembly {
+            let code := mload(implementation)
+            result := create2(0, add(implementation, 0x20), code, salt)
+        }
+    }
+}
 
-  /// @dev Provide extensive NatSpec documentation
-  /// @custom:oz-upgrades-unsafe-allow state-variable-immutable state-variable-assignment
+contract USAT is ERC721, IERC1271 {
+    using SignatureChecker for bytes;
 
-  // Security
+    constructor() ERC721("USAT", "USAT") {}
 
-  // Use Defender for monitoring and alerts
-  Defender defender;
+    function isValidSignature(bytes32 hash, bytes memory signature)
+        public
+        view
+        virtual
+        override
+        returns (bytes4 magicValue)
+    {
+        address signer = ownerOf(uint256(hash));
+        if (signature.isValidSignatureNow(signer, hash)) {
+            IERC6551Account accountContract = IERC6551Account(signer);
+            return accountContract.isValidSigner(signer, "");
+        }
+        return bytes4(0);
+    }
 
-  // Inherit from latest OZ contracts with security fixes
-
-  // Completeness
-
-  // Integrate Chainlink VRF for provably random NFT generation
-
-  // Reliability
-
-  // Comprehensive unit test coverage
-  function testMint() public {
-    // Test cases...
-  }
-
-  // Third-party audits with certificates
-
-  // Production Readiness
-  
-  // Scripts for easy deployments to multiple chains
-
-  // Integrate with NFT marketplaces like OpenSea
+    function deployTokenBoundAccount(
+        address implementation,
+        bytes32 salt,
+        uint256 chainId,
+        uint256 tokenId
+    ) external returns (address) {
+        ERC1167Structure structure = new ERC1167Structure();
+        return structure.deployERC1167(implementation, salt, chainId, address(this), tokenId);
+    }
 }
