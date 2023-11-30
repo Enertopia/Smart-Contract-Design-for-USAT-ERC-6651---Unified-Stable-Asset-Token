@@ -1,0 +1,70 @@
+// SPDX-License-Identifier: MIT
+// Copyright Emiliano German Solazzi Griminger
+
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts/access/AccessControl.sol";  
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+
+contract Account {
+  address public token;
+  uint256 public tokenId;
+  uint256 public nonce;
+}
+
+contract UpgradedTokenBoundAccount is AccessControl, ReentrancyGuard {
+
+  bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR");
+
+  Account public account;
+
+  error InvalidSignerError();
+  error OpNotAllowedError(uint8 operation);
+
+  event NonceIncreased(uint256 newNonce, uint256 validUntil);
+
+  constructor(Account _account) {
+    account = _account;
+    _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
+  }
+
+  function approveOperator(address operator) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    grantRole(OPERATOR_ROLE, operator);
+  }
+
+  function revokeOperator(address operator) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    revokeRole(OPERATOR_ROLE, operator);
+  }
+
+  function _isValidSigner(address signer) internal view returns (bool) {
+    return hasRole(OPERATOR_ROLE, signer) || signer == account.owner();
+  }
+
+  function execute(uint8 operation, bytes calldata signature, bytes calldata data) external nonReentrant returns (bytes memory) {
+    if (!hasRole(OPERATOR_ROLE, msg.sender)) {
+      revert InvalidSignerError();
+    }
+
+    if (!allowedOps[operation]) {
+      revert OpNotAllowedError(operation);
+    }
+
+    // Increment nonce
+    uint256 validUntil = block.timestamp + NONCE_VALIDITY; 
+    account.nonce++;
+
+    emit NonceIncreased(account.nonce, validUntil);
+
+    // Rest of logic
+
+    return call(data);
+  }
+
+  // View functions
+
+  function getOperators() external view returns (address[] memory) {
+    // Return operators
+  }
+
+}
