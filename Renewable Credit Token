@@ -1,99 +1,98 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2023 Emiliano German Solazzi Griminger. All rights reserved.
-
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/utils/Counters.sol";
 
 /**
- * @title RenewableCreditToken: ERC-20 compliant token representing renewable credits with UTXO model.
- * @dev This contract allows the minting of Renewable Credit Tokens with specific attributes and a UTXO-like model.
+ * @title RenewableCreditToken
+ * @dev ERC-20 compliant token representing renewable credits with UTXO model.
+ * Each UTXO represents a batch of tokens with associated attributes.
  */
-contract RenewableCreditToken is ERC20, Ownable {
-    using Counters for Counters.Counter;
-    Counters.Counter private _utxoCounter;
-
-    // Additional attributes for the RenewableCreditToken
-    struct RenewableCredit {
+contract RenewableCreditToken is ERC20Burnable, Ownable {
+    struct RenewableCreditAttributes {
         uint256 assetScore;
         uint256 esgScore;
-        // Add more attributes as needed...
+        // Additional attributes can be added here
     }
 
-    // UTXO struct for each issuance
     struct RenewableCreditUTXO {
-        uint256 utxoId;
-        uint256 tokenId;
-        // Add more UTXO attributes as needed...
+        uint256 amount;
+        RenewableCreditAttributes attributes;
+        address owner;
     }
 
-    mapping(uint256 => RenewableCredit) private _renewableCreditAttributes;
-    mapping(uint256 => RenewableCreditUTXO) public UTXOs;
+    // UTXO ID to UTXO mapping
+    mapping(uint256 => RenewableCreditUTXO) private _UTXOs;
 
-    event RenewableCreditMinted(address indexed to, uint256 amount, RenewableCredit attributes, RenewableCreditUTXO utxo);
+    // Counter for new UTXO IDs
+    uint256 private _nextUTXOId = 1;
+
+    event RenewableCreditMinted(uint256 indexed utxoId, address indexed to, uint256 amount, RenewableCreditAttributes attributes);
     event UTXORetired(uint256 indexed utxoId);
+    event UTXOTransferred(uint256 indexed utxoId, address indexed from, address indexed to);
 
-    /**
-     * @dev Constructor sets the name and symbol of the ERC-20 token.
-     */
     constructor() ERC20("Renewable Credit Token", "RCT") {}
 
     /**
-     * @dev Mint a new RenewableCreditToken with UTXO representation.
-     * @param to The address to receive the minted tokens.
+     * @dev Mints tokens and creates a new UTXO with the specified attributes.
+     * @param to The address that will receive the minted tokens.
      * @param amount The amount of tokens to mint.
-     * @param attributes Additional attributes for the renewable credit.
+     * @param attributes The attributes associated with the new UTXO.
      */
-    function mintRenewableCredit(address to, uint256 amount, RenewableCredit calldata attributes) external onlyOwner {
-        // Input validation
-        require(to != address(0), "Invalid address");
-        require(amount > 0, "Invalid amount");
-        require(attributes.assetScore > 0, "Invalid asset score");
-        require(attributes.esgScore > 0, "Invalid ESG score");
+    function mintRenewableCredit(address to, uint256 amount, RenewableCreditAttributes calldata attributes) external onlyOwner {
+        require(to != address(0), "Mint to the zero address");
+        require(amount > 0, "Amount must be greater than zero");
+        require(attributes.assetScore > 0, "Asset score must be greater than zero");
+        require(attributes.esgScore > 0, "ESG score must be greater than zero");
 
-        // Mint new tokens
         _mint(to, amount);
 
-        // Create a new UTXO for each issuance
-        uint256 utxoId = _utxoCounter.current();
-        _utxoCounter.increment();
-        UTXOs[utxoId] = RenewableCreditUTXO(utxoId, amount);
+        uint256 utxoId = _nextUTXOId++;
+        _UTXOs[utxoId] = RenewableCreditUTXO(amount, attributes, to);
 
-        // Set additional attributes for the RenewableCreditToken
-        _renewableCreditAttributes[utxoId] = attributes;
-
-        emit RenewableCreditMinted(to, amount, attributes, UTXOs[utxoId]);
+        emit RenewableCreditMinted(utxoId, to, amount, attributes);
     }
 
     /**
-     * @dev Retire a RenewableCreditToken UTXO.
-     * @param utxoId The UTXO ID to retire.
+     * @dev Retires a UTXO, burning the associated tokens.
+     * @param utxoId The ID of the UTXO to retire.
      */
-    function retireUTXO(uint256 utxoId) external onlyOwner {
-        // Logic for retiring the renewable credit UTXO...
-        // You may want to perform additional checks or actions before retiring the UTXO.
+    function retireUTXO(uint256 utxoId) external {
+        require(_UTXOs[utxoId].amount != 0, "UTXO does not exist");
+        require(_UTXOs[utxoId].owner == msg.sender, "Caller is not the owner of the UTXO");
 
-        // Emit event for UTXO retirement
+        // Burn the tokens associated with the UTXO
+        _burn(msg.sender, _UTXOs[utxoId].amount);
+
         emit UTXORetired(utxoId);
+
+        // Remove the UTXO from the mapping
+        delete _UTXOs[utxoId];
     }
 
     /**
-     * @dev Get the attributes of a specific RenewableCreditToken.
-     * @param utxoId The UTXO ID of the RenewableCreditToken.
-     * @return RenewableCredit Additional attributes of the specified token.
+     * @dev Transfers ownership of a UTXO to another address.
+     * @param utxoId The ID of the UTXO to transfer.
+     * @param to The address to transfer the UTXO to.
      */
-    function getRenewableCreditAttributes(uint256 utxoId) external view returns (RenewableCredit memory) {
-        return _renewableCreditAttributes[utxoId];
+    function transferUTXO(uint256 utxoId, address to) external {
+        require(_UTXOs[utxoId].amount != 0, "UTXO does not exist");
+        require(_UTXOs[utxoId].owner == msg.sender, "Caller is not the owner of the UTXO");
+        require(to != address(0), "Transfer to the zero address");
+
+        _UTXOs[utxoId].owner = to;
+
+        emit UTXOTransferred(utxoId, msg.sender, to);
     }
 
     /**
-     * @dev Get the UTXO information for a specific RenewableCreditToken.
-     * @param utxoId The UTXO ID of the RenewableCreditToken.
-     * @return RenewableCreditUTXO UTXO information of the specified token.
+     * @dev Retrieves the details of a UTXO.
+     * @param utxoId The ID of the UTXO to retrieve.
+     * @return The UTXO details.
      */
     function getUTXO(uint256 utxoId) external view returns (RenewableCreditUTXO memory) {
-        return UTXOs[utxoId];
+        require(_UTXOs[utxoId].amount != 0, "UTXO does not exist");
+        return _UTXOs[utxoId];
     }
 }
