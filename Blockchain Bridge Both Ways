@@ -8,6 +8,10 @@ from opentelemetry import trace
 from opentelemetry.exporter.jaeger import JaegerSpanExporter
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from web3 import Web3
+from bitcoinlib.wallets import Wallet as BitcoinWallet
+
+# Copyright 2023 Emiliano German Solazzi Griminger
 
 # Define the Transaction class
 class Transaction:
@@ -38,16 +42,18 @@ class TransactionError(Exception):
 class EthereumClient(BlockchainClient):
     @classmethod
     def send_transaction(cls, tx: Transaction) -> str:
-        # Implement Ethereum-specific logic here
-        # For example, use web3.py to interact with Ethereum
+        w3 = Web3(Web3.HTTPProvider("http://localhost:8545"))
+        # Replace this with actual Ethereum transaction sending logic using web3.py
+        # For example, use w3.eth.sendTransaction({...})
         return f"ethereum_tx_id: {tx.data}"
 
 # Define the BitcoinClient class
 class BitcoinClient(BlockchainClient):
     @classmethod
     def send_transaction(cls, tx: Transaction) -> str:
-        # Implement Bitcoin-specific logic here
-        # For example, use a Bitcoin library to interact with Bitcoin
+        # Replace this with actual Bitcoin transaction sending logic using bitcoinlib
+        w = BitcoinWallet("your_bitcoin_wallet_name", keys="your_bitcoin_wallet_password")
+        # For example, use w.send_to(address, amount)
         return f"bitcoin_tx_id: {tx.data}"
 
 # Define the BitcoinCrossChainClient class
@@ -146,4 +152,3 @@ if __name__ == "__main__":
     # Keep the event loop running
     asyncio.get_event_loop().run_forever()
 
-# Copyright 2023 Emiliano German Solazzi Griminger
