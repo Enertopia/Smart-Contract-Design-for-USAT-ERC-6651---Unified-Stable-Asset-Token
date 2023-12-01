@@ -5,89 +5,65 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-
-interface IERC6651Account {
-    function isValidSignature(bytes32 hash, bytes calldata signature) external view returns (bytes4 magicValue);
-}
+import "@openzeppelin/contracts/utils/Counters.sol";
 
 /**
  * @title TitleChainRegistry
- * @dev A registry contract for managing asset titles on the blockchain using ERC721 tokens.
- */
+ * @author Emiliano German Solazzi Griminger 
+ * @notice ERC721 contract to manage tokenized asset titles and metadata
+*/
 contract TitleChainRegistry is ERC721, Ownable {
-    uint256 private tokenIdCounter;
 
-    mapping(uint256 => string) private assetTitles;
-    mapping(uint256 => mapping(bytes32 => string)) private assetAttachments;
-    mapping(uint256 => address) private factorizationContracts;
+  using Counters for Counters.Counter;
 
-    event FactorizationContractCreated(uint256 indexed tokenId, address factorizationContract);
+  Counters.Counter private _tokenIdCounter;
 
-    /**
-     * @dev Constructor to initialize the ERC721 contract with a name and symbol.
-     */
-    constructor() ERC721("TitleChain", "TC") {}
+  mapping (uint256 => AssetData) private _assets;
 
-    /**
-     * @notice Mints a new Unique Serial Asset Token (USAT) with a given title to a specified address.
-     * @param to Address to mint the token to.
-     * @param title Title of the asset.
-     */
-    function mintUSAT(address to, string memory title) external onlyOwner {
-        uint256 tokenId = tokenIdCounter++;
-        _safeMint(to, tokenId);
-        assetTitles[tokenId] = title;
-    }
+  struct AssetData {
+    string title;
+    mapping (string => string) metadata;
+    address factorizationContract; 
+  }
 
-    /**
-     * @notice Transfers a USAT to a specified address and updates its title.
-     * @param to Address to transfer the token to.
-     * @param tokenId ID of the token to transfer.
-     * @param newTitle New title to set for the asset.
-     */
-    function transferUSAT(address to, uint256 tokenId, string memory newTitle) external onlyOwner {
-        require(_exists(tokenId), "Token does not exist");
-        _transfer(ownerOf(tokenId), to, tokenId);
-        assetTitles[tokenId] = newTitle;
-        factorizationContracts[tokenId] = address(0);
-    }
+  event AssetMinted(uint256 indexed tokenId, address indexed owner);
 
-    /**
-     * @notice Creates a factorization contract for a USAT.
-     * @param tokenId ID of the token.
-     * @param factorizationContract Address of the factorization contract.
-     */
-    function createFactorizationContract(uint256 tokenId, address factorizationContract) external onlyOwner {
-        require(_exists(tokenId), "Token does not exist");
-        require(factorizationContracts[tokenId] == address(0), "Factorization contract already exists");
-        factorizationContracts[tokenId] = factorizationContract;
-        emit FactorizationContractCreated(tokenId, factorizationContract);
-    }
+  event AssetTransferred(uint256 indexed tokenId, address indexed from, address indexed to);
 
-    /**
-     * @notice Attaches metadata to a USAT.
-     * @param tokenId ID of the token.
-     * @param key Key of the metadata.
-     * @param value Value of the metadata.
-     */
-    function attachMetadata(uint256 tokenId, string memory key, string memory value) external onlyOwner {
-        require(_exists(tokenId), "Token does not exist");
-        bytes32 keyHash = keccak256(abi.encodePacked(key));
-        assetAttachments[tokenId][keyHash] = value;
-    }
+  event MetadataSet(uint256 indexed tokenId, string key, string value);
 
-    /**
-     * @notice Gets metadata attached to a USAT.
-     * @param tokenId ID of the token.
-     * @param key Key of the metadata.
-     * @return value Value of the metadata.
-     */
-    function getMetadata(uint256 tokenId, string memory key) external view returns (string memory value) {
-        require(_exists(tokenId), "Token does not exist");
-        bytes32 keyHash = keccak256(abi.encodePacked(key));
-        return assetAttachments[tokenId][keyHash];
-    }
+  event FactorizationSet(uint256 indexed tokenId, address factorizationContract);
 
-    // Add more functions as needed...
+  constructor() ERC721("TitleChain", "TC") {}
+
+  modifier onlyOwnerOrOperator() {
+    require(msg.sender == owner() || operators[msg.sender], "Unauthorized");
+    _;
+  }
+
+  mapping (address => bool) public operators;
+
+  function setOperator(address operator, bool approved) external onlyOwner {
+    operators[operator] = approved;
+  }
+
+  function mint(address to, string memory title) external onlyOwnerOrOperator {
+    uint256 tokenId = _tokenIdCounter.current();
+    _tokenIdCounter.increment();
+    _safeMint(to, tokenId);
+
+    AssetData storage asset = _assets[tokenId];
+    asset.title = title;
+
+    emit AssetMinted(tokenId, to);
+  }  
+
+  // Other functions 
+
+  function burn(uint256 tokenId) external onlyOwnerOrOperator {
+    require(_exists(tokenId), "Nonexistent token");
+    _burn(tokenId);
+  }
 
 }
+
