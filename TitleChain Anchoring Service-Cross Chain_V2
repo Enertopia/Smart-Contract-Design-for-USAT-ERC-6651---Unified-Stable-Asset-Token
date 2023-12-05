@@ -1,0 +1,117 @@
+TitleChain Anchoring Service
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2023 Emiliano German Solazzi Griminger
+
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@chainlink/contracts/src/v0.8/interfaces/CCIP/ICrossChain.sol";
+import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
+import "@storj/thirdparty/storage-contracts/Interfaces/Storj/IStorageNode.sol";
+
+contract TitleChainRegistry is ERC721, Ownable {
+    uint256 private tokenIdCounter;
+
+    mapping(uint256 => string) private assetTitles;
+    mapping(uint256 => address) private assetChains;
+
+    ICrossChain public ccip;
+    AggregatorV3Interface internal priceFeed;
+    IStorageNode public storjNode;
+
+    event AssetTitleUpdated(uint256 indexed tokenId, string newTitle);
+    event AssetMovedCrossChain(uint256 indexed tokenId, address indexed toChain);
+
+    constructor(address _ccip, address _priceFeedAddress, address _storjNode) ERC721("TitleChain", "TC") {
+        ccip = ICrossChain(_ccip);
+        priceFeed = AggregatorV3Interface(_priceFeedAddress);
+        storjNode = IStorageNode(_storjNode);
+    }
+
+    function mintUSAT(address to, string memory title) external onlyOwner {
+        uint256 tokenId = tokenIdCounter++;
+        _safeMint(to, tokenId);
+        assetTitles[tokenId] = title;
+
+        // Batch Processing and Anchoring Logic
+        _notifyBatchAnchoring(tokenId);
+
+        // Additional Security Check
+        require(tokenIdCounter <= type(uint256).max, "Token ID overflow");
+    }
+
+    function updateAssetTitle(uint256 tokenId, string memory newTitle) external onlyOwner {
+        _validateTokenExists(tokenId);
+
+        assetTitles[tokenId] = newTitle;
+
+        // Emit an event or perform any other necessary actions
+        emit AssetTitleUpdated(tokenId, newTitle);
+
+        // Batch Processing and Anchoring Logic
+        _notifyBatchAnchoring(tokenId);
+
+        // Audit and Compliance Logging
+        _logComplianceEvent("Asset title updated", tokenId);
+    }
+
+    function getTitle(uint256 tokenId) external view returns (string memory) {
+        _validateTokenExists(tokenId);
+        return assetTitles[tokenId];
+    }
+
+    function interactWithBase(string memory baseAction) external onlyOwner {
+        // Perform actions to interact with Base on Ethereum Layer 2
+        // This could include sending transactions, retrieving data, etc.
+        // For demonstration purposes, this function is left abstract.
+
+        // Batch Processing and Anchoring Logic
+        _notifyBatchAnchoring(tokenIdCounter);
+
+        // Audit and Compliance Logging
+        _logComplianceEvent("Interacted with Base", tokenIdCounter);
+    }
+
+    function moveAssetCrossChain(uint256 tokenId, address toChain) external onlyOwner {
+        _validateTokenExists(tokenId);
+
+        // Update the asset's chain information
+        assetChains[tokenId] = toChain;
+
+        // Emit an event or perform any other necessary actions
+        emit AssetMovedCrossChain(tokenId, toChain);
+
+        // Batch Processing and Anchoring Logic
+        _notifyBatchAnchoring(tokenId);
+
+        // Audit and Compliance Logging
+        _logComplianceEvent("Asset moved to another chain", tokenId);
+    }
+
+    function getPriceFeed() external view returns (int256) {
+        // Retrieve the latest price from the Chainlink price feed
+        (, int256 price, , , ) = priceFeed.latestRoundData();
+        return price;
+    }
+
+    function _notifyBatchAnchoring(uint256 tokenId) internal {
+        // Batch Processing and Anchoring Logic
+        ccip.notifyBatchAnchoring(tokenId);
+    }
+
+    function _logComplianceEvent(string memory action, uint256 tokenId) internal {
+        // Implement comprehensive logging for regulatory compliance
+        // This could involve emitting events, storing data off-chain, etc.
+        // For demonstration purposes, this function is left abstract.
+
+        // StorageNode Integration
+        storjNode.storeData(abi.encodePacked(action, tokenId));
+    }
+
+    function _validateTokenExists(uint256 tokenId) internal view {
+        require(_exists(tokenId), "Token does not exist");
+    }
+
+    // Other functions and logic can be added based on specific requirements.
+}
