@@ -1,0 +1,158 @@
+"""
+Copyright (c) 2023 Emiliano German Solazzi Griminger. All rights reserved.
+"""
+
+import requests
+from requests.exceptions import RequestException
+from tenacity import retry, stop_after_attempt, wait_exponential
+import logging
+import time
+from statsd import StatsClient
+import unittest
+from unittest.mock import patch, Mock
+
+logger = logging.getLogger(__name__)
+statsd = StatsClient()
+
+class APIError(Exception):
+    """Custom API Exception"""
+    pass
+
+class CloverlyAPIClient:
+
+    API_BASE_URL = "https://api.cloverly.com"
+
+    def __init__(self, api_key, shop_by=None, weight_unit=None, currency=None, fixed_or_any=None,
+                 amount=None, tags=None, note=None):
+        self.api_key = api_key
+        self.shop_by = shop_by
+        self.weight_unit = weight_unit
+        self.currency = currency
+        self.fixed_or_any = fixed_or_any
+        self.amount = amount
+        self.tags = tags
+        self.note = note
+
+    def purchase_carbon_credits(self, user_id, footprint, project_id=None):
+        """
+        Purchase carbon credits
+
+        Parameters:
+        - user_id (str): Unique user identifier
+        - footprint (float): Tonnes of CO2 to offset
+        - project_id (str): Optional project ID to support
+
+        Returns:
+        - list of transaction IDs
+        """
+
+        start_time = time.time()
+
+        try:
+            self._validate_input(user_id, footprint)
+
+            endpoint = f"{self.API_BASE_URL}/purchases/carbon"
+            payload = {
+                "user_id": user_id,
+                "footprint_tonnes": footprint,
+                "project_id": project_id,
+                "shop_by": self.shop_by,
+                "weight_unit": self.weight_unit,
+                "currency": self.currency,
+                "fixed_or_any": self.fixed_or_any,
+                "amount": self.amount,
+                "tags": self.tags,
+                "note": self.note,
+            }
+
+            response = self._make_request(endpoint, payload)
+
+            transactions = self._get_transactions(response)
+            return [t["id"] for t in transactions]
+
+        except RequestException as e:
+            self._handle_error(e)
+        finally:
+            elapsed_time = time.time() - start_time
+            statsd.histogram('purchase.latency', elapsed_time)
+            logger.info(f"Purchase completed in {elapsed_time} seconds")
+
+    def _make_request(self, endpoint, payload):
+        response = requests.post(
+            endpoint,
+            json=payload,
+            headers=self._get_headers(),
+            timeout=5
+        )
+        self._validate_response(response)
+        return response
+
+    def _get_headers(self):
+        return {'Authorization': self.api_key}
+
+    def _validate_input(self, user_id, footprint):
+        if not isinstance(user_id, str) or not user_id.strip():
+            raise ValueError("Invalid user_id")
+
+        if not isinstance(footprint, (float, int)) or footprint < 0:
+            raise ValueError("Invalid footprint")
+
+    def _validate_response(self, response):
+        if response.status_code == 401:
+            raise APIError("Invalid API key")
+
+        if response.status_code != 200:
+            raise APIError(f"Unexpected status {response.status_code}")
+
+        # Check response structure
+        resp_json = response.json()
+        if "transactions" not in resp_json:
+            raise APIError("Missing transactions in response")
+
+    def _get_transactions(self, response):
+        transactions = response.json()["transactions"]
+        if not isinstance(transactions, list):
+            raise APIError("Transactions must be list")
+
+        return transactions
+
+    def _handle_error(self, error):
+        logger.error(f"Error: {error}")
+        statsd.incr('purchase.errors')
+        raise APIError(str(error)) from error
+
+# Tests
+
+class TestCloverlyAPIClient(unittest.TestCase):
+
+    @patch("requests.post")
+    def test_purchase_carbon_credits(self, mock_post):
+        # Test successful purchase
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "transactions": [
+                {"id": "txn123", "state": "estimated"}
+            ]
+        }
+        mock_post.return_value = mock_response
+
+        client = CloverlyAPIClient("test-key", shop_by="carbon", weight_unit="tonnes",
+                                   currency="USD", fixed_or_any="fixed", amount=50,
+                                   tags="Checkout", note="This is a note")
+        txns = client.purchase_carbon_credits("user1", 5.5)
+
+        self.assertEqual(txns, ["txn123"])
+        # Assert API call
+        mock_post.assert_called_with(
+            "https://api.cloverly.com/purchases/carbon",
+            {"user_id": "user1", "footprint_tonnes": 5.5,
+             "project_id": None, "shop_by": "carbon", "weight_unit": "tonnes",
+             "currency": "USD", "fixed_or_any": "fixed", "amount": 50,
+             "tags": "Checkout", "note": "This is a note"},
+            timeout=5
+        )
+
+        # Test invalid API key
+        mock_response.status_code = 401
+        self.assertRaises(APIError, client.purchase_carbon_credits, "user1", 5.5)
