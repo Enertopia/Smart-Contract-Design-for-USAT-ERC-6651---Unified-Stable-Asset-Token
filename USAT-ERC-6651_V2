@@ -1,0 +1,98 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2023 Emiliano German Solazzi Griminger
+
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts/utils/introspection/IERC165.sol";
+import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+import "@openzeppelin/contracts/interfaces/IERC1271.sol";
+import "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+
+interface IERC6551Account {
+    // Interface for token-bound account functionality
+    // ...
+}
+
+interface IERC6551Executable {
+    // Interface for executing transactions in a token-bound account
+    // ...
+}
+
+contract ERC6551Account is IERC165, IERC1271, IERC6551Account, IERC6551Executable {
+    using SafeMath for uint256;
+
+    uint256 public state;
+    uint256 public gasFee;
+
+    receive() external payable {}
+
+    function setGasFee(uint256 _gasFee) external {
+        require(msg.sender == owner(), "Only the owner can set the gas fee");
+        gasFee = _gasFee;
+    }
+
+    function execute(address to, uint256 value, bytes calldata data, uint8 operation)
+        external
+        payable
+        virtual
+        returns (bytes memory result)
+    {
+        // Validate signer and operation
+        _validateSigner();
+        _validateOperation(operation);
+
+        // Increment state
+        state = state.add(1);
+
+        // Gas-efficient external call with dynamic gas fee
+        (bool success, bytes memory resultData) = _safeExternalCall(to, value, data, gasFee);
+
+        require(success, "Transaction execution failed");
+
+        return resultData;
+    }
+
+    function isValidSigner(address signer, bytes calldata) external view virtual returns (bytes4) {
+        return _isValidSigner(signer) ? IERC6551Account.isValidSigner.selector : bytes4(0);
+    }
+
+    function isValidSignature(bytes32 hash, bytes memory signature)
+        external
+        view
+        virtual
+        returns (bytes4 magicValue)
+    {
+        require(SignatureChecker.isValidSignatureNow(owner(), hash, signature), "Invalid signature");
+
+        return IERC1271.isValidSignature.selector;
+    }
+
+    function supportsInterface(bytes4 interfaceId) external pure virtual returns (bool) {
+        return
+            interfaceId == type(IERC165).interfaceId ||
+            interfaceId == type(IERC6551Account).interfaceId;
+    }
+
+    function _validateSigner() internal view {
+        require(_isValidSigner(msg.sender), "Invalid signer");
+    }
+
+    function _validateOperation(uint8 operation) internal pure {
+        require(operation == 0, "Only call operations are supported");
+    }
+
+    // Gas-efficient external call
+    function _safeExternalCall(
+        address to,
+        uint256 value,
+        bytes calldata data,
+        uint256 _gasFee
+    ) internal returns (bool success, bytes memory result) {
+        // Use inline assembly to make an external call with dynamic gas fee
+        assembly {
+            success := call(gas(), to, value, add(data, 0x20), mload(data), 0, 0)
+            result := mload(0)
+        }
+    }
+}
