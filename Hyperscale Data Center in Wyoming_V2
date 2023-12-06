@@ -6,82 +6,50 @@ pragma solidity ^0.8.15;
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 
 contract WyomingCredits is ERC20, ReentrancyGuard, AccessControl {
+  using SafeMath for uint256;
 
-    bytes32 public constant CARBON = keccak256("CarbonOffset");
-    bytes32 public constant WATER = keccak256("WaterOffset");
-    bytes32 public constant ESRIN = keccak256("ESRIN");
+  bytes32 public constant CARBON = keccak256("CarbonOffset");
+  bytes32 public constant WATER = keccak256("WaterOffset");
+  bytes32 public constant ESRIN = keccak256("ESRIN");
 
-    uint256 public immutable carbonSupply = 419500 * 20;
-    uint256 public immutable waterSupply = 10 * 1e9; // 10 billion gallons
-    uint256 public immutable esrinSupply = 1.5 * 1e6; // 1.5 million ESRIN
+  uint256 public carbonSupply; 
+  uint256 public waterSupply;
+  uint256 public esrinSupply;
 
-    mapping(address => uint256) public carbonBalance;
-    mapping(address => uint256) public waterBalance;
-    mapping(address => uint256) public esrinBalance;
+  mapping(address => uint256) public carbonBalance;
+  mapping(address => uint256) public waterBalance;
+  mapping(address => uint256) public esrinBalance;
 
-    event CarbonRedeemed(address indexed user, uint256 amount);
-    event WaterRedeemed(address indexed user, uint256 amount);
-    event ESRINRedeemed(address indexed user, uint256 amount);
+  event CarbonRedeemed(address indexed user, uint256 amount);
 
-    uint256 public constant RECPricing = 20; // $ per tonne of CO2
-    uint256 public constant WaterCreditPricing = 0.05; // $ per gallon
-    uint256 public constant ESRINPricing = 1; // $ per ESRIN
+  uint256 public constant RECPricing = 20; 
 
-    // New variables to track total USATs minted
-    uint256 public totalWaterCreditsUSATs;
-    uint256 public totalESRINUSATs;
-    uint256 public totalCarbonCreditsUSATs;
+  uint256 public totalCarbonCreditsUSATs;
 
-    constructor() ERC20("Wyoming Credit", "WCR") {
-        totalCreditSupply.totalSupply = carbonSupply + waterSupply + esrinSupply;
-        totalCreditSupply.creditTypeSupply[CARBON] = carbonSupply;
-        totalCreditSupply.creditTypeSupply[WATER] = waterSupply;
-        totalCreditSupply.creditTypeSupply[ESRIN] = esrinSupply;
+  constructor() ERC20("Wyoming Credit", "WCR") {
+    carbonSupply = 419500 * 20;
+    waterSupply = 10 * 1e9; 
+    esrinSupply = 1.5 * 1e6;
 
-        _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
-    }
+    _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
+  }
 
-    function redeemCarbon(uint256 amount) external nonReentrant {
-        carbonBalance[msg.sender] -= amount;
-        _burn(msg.sender, amount, CARBON);
-        emit CarbonRedeemed(msg.sender, amount);
+  function redeemCarbon(uint256 amount) external nonReentrant {
+    carbonBalance[msg.sender] = carbonBalance[msg.sender].sub(amount);
 
-        // Mint equivalent USATs for Carbon Credits
-        uint256 carbonUSATs = (amount * RECPricing) / 20;
-        totalCarbonCreditsUSATs += carbonUSATs;
-        _mint(msg.sender, carbonUSATs);
-    }
+    _burn(msg.sender, amount);
 
-    function redeemWater(uint256 amount) external nonReentrant {
-        waterBalance[msg.sender] -= amount;
-        _burn(msg.sender, amount, WATER);
-        emit WaterRedeemed(msg.sender, amount);
+    emit CarbonRedeemed(msg.sender, amount);
 
-        // Mint equivalent USATs for Water Credits
-        uint256 waterUSATs = (amount * WaterCreditPricing) / 0.05;
-        totalWaterCreditsUSATs += waterUSATs;
-        _mint(msg.sender, waterUSATs);
-    }
+    uint256 carbonUSATs = amount.mul(RECPricing).div(20);
 
-    function redeemEsrin(uint256 amount) external nonReentrant {
-        esrinBalance[msg.sender] -= amount;
-        _burn(msg.sender, amount, ESRIN);
-        emit ESRINRedeemed(msg.sender, amount);
+    totalCarbonCreditsUSATs = totalCarbonCreditsUSATs.add(carbonUSATs);
+    
+    _mint(msg.sender, carbonUSATs);
+  }
 
-        // Mint equivalent USATs for ESRIN
-        uint256 esrinUSATs = amount / ESRINPricing;
-        totalESRINUSATs += esrinUSATs;
-        _mint(msg.sender, esrinUSATs);
-    }
-
-    function addAdmin(address admin) external onlyAdmin {
-        grantRole(DEFAULT_ADMIN_ROLE, admin);
-    }
-
-    modifier onlyAdmin() {
-        require(hasRole(DEFAULT_ADMIN_ROLE, msg.sender), "Not authorized: only admin");
-        _;
-    }
+  // Other credit types and improvements
 }
