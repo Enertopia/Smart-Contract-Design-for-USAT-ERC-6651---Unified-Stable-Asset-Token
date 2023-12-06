@@ -9,47 +9,84 @@ import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 
 contract WyomingCredits is ERC20, ReentrancyGuard, AccessControl {
-  using SafeMath for uint256;
+    using SafeMath for uint256;
 
-  bytes32 public constant CARBON = keccak256("CarbonOffset");
-  bytes32 public constant WATER = keccak256("WaterOffset");
-  bytes32 public constant ESRIN = keccak256("ESRIN");
+    bytes32 public constant CARBON = keccak256("CarbonOffset");
+    bytes32 public constant WATER = keccak256("WaterOffset");
+    bytes32 public constant ESRIN = keccak256("ESRIN");
 
-  uint256 public carbonSupply; 
-  uint256 public waterSupply;
-  uint256 public esrinSupply;
+    uint256 public constant RECPricing = 20;
+    uint256 public constant WaterCreditPricing = 0.05;
+    uint256 public constant ESRINPricing = 1;
 
-  mapping(address => uint256) public carbonBalance;
-  mapping(address => uint256) public waterBalance;
-  mapping(address => uint256) public esrinBalance;
+    uint256 public totalCarbonCreditsUSATs;
+    uint256 public totalWaterCreditsUSATs;
+    uint256 public totalESRINUSATs;
 
-  event CarbonRedeemed(address indexed user, uint256 amount);
+    mapping(address => uint256) public carbonBalance;
+    mapping(address => uint256) public waterBalance;
+    mapping(address => uint256) public esrinBalance;
 
-  uint256 public constant RECPricing = 20; 
+    event CarbonRedeemed(address indexed user, uint256 amount);
+    event WaterRedeemed(address indexed user, uint256 amount);
+    event ESRINRedeemed(address indexed user, uint256 amount);
 
-  uint256 public totalCarbonCreditsUSATs;
+    struct CreditSupply {
+        uint256 totalSupply;
+        mapping(bytes32 => uint256) creditTypeSupply;
+    }
 
-  constructor() ERC20("Wyoming Credit", "WCR") {
-    carbonSupply = 419500 * 20;
-    waterSupply = 10 * 1e9; 
-    esrinSupply = 1.5 * 1e6;
+    CreditSupply public totalCreditSupply;
 
-    _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
-  }
+    constructor() ERC20("Wyoming Credit", "WCR") {
+        uint256 carbonSupply = 419500 * 20;
+        uint256 waterSupply = 10 * 1e9;
+        uint256 esrinSupply = 1.5 * 1e6;
 
-  function redeemCarbon(uint256 amount) external nonReentrant {
-    carbonBalance[msg.sender] = carbonBalance[msg.sender].sub(amount);
+        totalCreditSupply.totalSupply = carbonSupply + waterSupply + esrinSupply;
+        totalCreditSupply.creditTypeSupply[CARBON] = carbonSupply;
+        totalCreditSupply.creditTypeSupply[WATER] = waterSupply;
+        totalCreditSupply.creditTypeSupply[ESRIN] = esrinSupply;
 
-    _burn(msg.sender, amount);
+        _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
+    }
 
-    emit CarbonRedeemed(msg.sender, amount);
+    function redeemCarbon(uint256 amount) external nonReentrant {
+        require(amount <= carbonBalance[msg.sender], "Insufficient carbon balance");
+        carbonBalance[msg.sender] = carbonBalance[msg.sender].sub(amount);
+        _burn(msg.sender, amount, CARBON);
+        emit CarbonRedeemed(msg.sender, amount);
+        uint256 carbonUSATs = amount.mul(RECPricing).div(20);
+        totalCarbonCreditsUSATs = totalCarbonCreditsUSATs.add(carbonUSATs);
+        _mint(msg.sender, carbonUSATs);
+    }
 
-    uint256 carbonUSATs = amount.mul(RECPricing).div(20);
+    function redeemWater(uint256 amount) external nonReentrant {
+        require(amount <= waterBalance[msg.sender], "Insufficient water balance");
+        waterBalance[msg.sender] = waterBalance[msg.sender].sub(amount);
+        _burn(msg.sender, amount, WATER);
+        emit WaterRedeemed(msg.sender, amount);
+        uint256 waterUSATs = amount.mul(WaterCreditPricing).div(0.05);
+        totalWaterCreditsUSATs = totalWaterCreditsUSATs.add(waterUSATs);
+        _mint(msg.sender, waterUSATs);
+    }
 
-    totalCarbonCreditsUSATs = totalCarbonCreditsUSATs.add(carbonUSATs);
-    
-    _mint(msg.sender, carbonUSATs);
-  }
+    function redeemEsrin(uint256 amount) external nonReentrant {
+        require(amount <= esrinBalance[msg.sender], "Insufficient ESRIN balance");
+        esrinBalance[msg.sender] = esrinBalance[msg.sender].sub(amount);
+        _burn(msg.sender, amount, ESRIN);
+        emit ESRINRedeemed(msg.sender, amount);
+        uint256 esrinUSATs = amount.div(ESRINPricing);
+        totalESRINUSATs = totalESRINUSATs.add(esrinUSATs);
+        _mint(msg.sender, esrinUSATs);
+    }
 
-  // Other credit types and improvements
+    function addAdmin(address admin) external onlyAdmin {
+        grantRole(DEFAULT_ADMIN_ROLE, admin);
+    }
+
+    modifier onlyAdmin() {
+        require(hasRole(DEFAULT_ADMIN_ROLE, msg.sender), "Not authorized: only admin");
+        _;
+    }
 }
