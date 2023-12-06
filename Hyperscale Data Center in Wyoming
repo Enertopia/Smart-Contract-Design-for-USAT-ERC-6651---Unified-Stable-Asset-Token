@@ -1,0 +1,97 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2023 Emiliano German Solazzi Griminger
+
+pragma solidity ^0.8.15;
+
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/access/AccessControl.sol";
+
+contract WyomingCredits is ERC20, ReentrancyGuard, AccessControl {
+
+    // Define credit type hashes
+    bytes32 public constant CARBON = keccak256("CarbonOffset");
+    bytes32 public constant WATER = keccak256("WaterOffset");
+    bytes32 public constant ESRIN = keccak256("ESRIN");
+
+    // Define supply amounts for different credit types
+    uint256 public immutable carbonSupply = 419500 * 20;
+    uint256 public immutable waterSupply = 10 * 1e9; // 10 billion gallons
+    uint256 public immutable esrinSupply = 1.5 * 1e6; // 1.5 million ESRIN
+
+    // Balances for each credit type
+    mapping(address => uint256) public carbonBalance;
+    mapping(address => uint256) public waterBalance;
+    mapping(address => uint256) public esrinBalance;
+
+    // Events to track credit redemption
+    event CarbonRedeemed(address indexed user, uint256 amount);
+    event WaterRedeemed(address indexed user, uint256 amount);
+    event ESRINRedeemed(address indexed user, uint256 amount);
+
+    // Financial Projections
+    uint256 public constant RECPricing = 20; // $ per tonne of CO2
+    uint256 public constant WaterCreditPricing = 0.05; // $ per gallon
+    uint256 public constant ESRINPricing = 1; // $ per ESRIN
+
+    // Constructor initializes the token and admin role
+    constructor() ERC20("Wyoming Credit", "WCR") {
+        // Set total supply and credit type supplies
+        totalCreditSupply.totalSupply = carbonSupply + waterSupply + esrinSupply;
+        totalCreditSupply.creditTypeSupply[CARBON] = carbonSupply;
+        totalCreditSupply.creditTypeSupply[WATER] = waterSupply;
+        totalCreditSupply.creditTypeSupply[ESRIN] = esrinSupply;
+
+        // Set the default admin role to the contract deployer
+        _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
+    }
+
+    // Function to redeem carbon credits
+    function redeemCarbon(uint256 amount) external nonReentrant {
+        // Decrease user's carbon balance
+        carbonBalance[msg.sender] -= amount;
+
+        // Burn the redeemed carbon credits
+        _burn(msg.sender, amount, CARBON);
+
+        // Emit redemption event
+        emit CarbonRedeemed(msg.sender, amount);
+    }
+
+    // Function to redeem water credits
+    function redeemWater(uint256 amount) external nonReentrant {
+        // Decrease user's water balance
+        waterBalance[msg.sender] -= amount;
+
+        // Burn the redeemed water credits
+        _burn(msg.sender, amount, WATER);
+
+        // Emit redemption event
+        emit WaterRedeemed(msg.sender, amount);
+    }
+
+    // Function to redeem ESRIN credits
+    function redeemEsrin(uint256 amount) external nonReentrant {
+        // Decrease user's ESRIN balance
+        esrinBalance[msg.sender] -= amount;
+
+        // Burn the redeemed ESRIN credits
+        _burn(msg.sender, amount, ESRIN);
+
+        // Emit redemption event
+        emit ESRINRedeemed(msg.sender, amount);
+    }
+
+    // Function to add an admin by the current admin
+    function addAdmin(address admin) external onlyAdmin {
+        // Grant the DEFAULT_ADMIN_ROLE to the specified address
+        grantRole(DEFAULT_ADMIN_ROLE, admin);
+    }
+
+    // Modifier to ensure only admin can call a function
+    modifier onlyAdmin() {
+        require(hasRole(DEFAULT_ADMIN_ROLE, msg.sender), "Not authorized: only admin");
+        _;
+    }
+}
+
