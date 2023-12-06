@@ -1,0 +1,70 @@
+// SPDX-License-Identifier: MIT 
+// Copyright (c) 2023 Emiliano German Solazzi Griminger
+
+pragma solidity ^0.8.15;
+
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/access/AccessControl.sol";
+
+contract CreditFutures is ERC20, ReentrancyGuard, AccessControl {
+
+  // Roles
+  bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
+  bytes32 public constant BURNER_ROLE = keccak256("BURNER_ROLE");
+
+  // Immutable total supply struct
+  struct CreditSupply {
+    uint256 totalSupply;
+    mapping(bytes32 => uint256) creditTypeSupply; 
+  }
+
+  CreditSupply public immutable totalCreditSupply;
+
+  // Events
+  event CreditMinted(address indexed to, uint256 amount, bytes32 indexed creditTypeHash);
+  event CreditBurned(address indexed from, uint256 amount, bytes32 indexed creditTypeHash);
+
+  constructor() ERC20("Credit Futures Token", "CFT") {
+    _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
+  }
+
+  function mint(address to, uint256 amount, bytes32 creditTypeHash) external onlyMinter nonReentrant {
+   // Mint tokens
+  }
+
+  function burn(address from, uint256 amount, bytes32 creditTypeHash) external onlyBurner nonReentrant {
+   // Burn tokens 
+  }
+
+  // Admin functions
+  function addMinter(address minter) external onlyAdmin {
+    // Grant minter role
+  }
+
+  function removeMinter(address minter) external onlyAdmin {
+   // Revoke minter role
+  }
+
+  function addBurner(address burner) external onlyAdmin {
+    // Grant burner role
+  }
+
+  function removeBurner(address burner) external onlyAdmin {
+    // Revoke burner role
+  }
+
+  // Modifiers
+  modifier onlyMinter() {
+    // Check minter role
+  }
+
+  modifier onlyBurner() {
+    // Check burner role
+  }
+
+  modifier onlyAdmin() {
+    // Check admin role
+  }
+
+}
