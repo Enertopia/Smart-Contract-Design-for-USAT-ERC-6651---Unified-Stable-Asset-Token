@@ -1,0 +1,131 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2023 Emiliano German Solazzi Griminger
+
+pragma solidity ^0.8.23;
+
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "./ERC6551Account.sol";
+
+// MultiSignature contract for simple multi-signature functionality
+contract MultiSignature is ReentrancyGuard {
+    address[] public owners;
+    mapping(address => bool) public isOwner;
+    uint256 public requiredSignatures;
+
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+
+    modifier onlyOwner() {
+        require(isOwner[msg.sender], "Not an owner");
+        _;
+    }
+
+    modifier validRequirement(uint256 ownerCount, uint256 _requiredSignatures) {
+        require(ownerCount <= 10 && _requiredSignatures <= ownerCount && _requiredSignatures != 0 && ownerCount != 0, "Invalid requirements");
+        _;
+    }
+
+    constructor(address[] memory _owners, uint256 _requiredSignatures) validRequirement(_owners.length, _requiredSignatures) {
+        for (uint256 i = 0; i < _owners.length; i++) {
+            require(_owners[i] != address(0) && !isOwner[_owners[i]], "Invalid owner");
+            isOwner[_owners[i]] = true;
+        }
+        owners = _owners;
+        requiredSignatures = _requiredSignatures;
+    }
+
+    function transferOwnership(address newOwner) external onlyOwner {
+        require(newOwner != address(0) && !isOwner[newOwner], "Invalid new owner");
+        emit OwnershipTransferred(owners[0], newOwner);
+        isOwner[owners[0]] = false;
+        isOwner[newOwner] = true;
+        owners[0] = newOwner;
+    }
+
+    function removeOwner(address ownerToRemove) external onlyOwner {
+        require(ownerToRemove != address(0) && isOwner[ownerToRemove], "Invalid owner to remove");
+        require(owners.length - 1 >= requiredSignatures, "Cannot remove owner below required signatures");
+        isOwner[ownerToRemove] = false;
+        for (uint256 i = 0; i < owners.length; i++) {
+            if (owners[i] == ownerToRemove) {
+                owners[i] = owners[owners.length - 1];
+                owners.pop();
+                break;
+            }
+        }
+    }
+
+    function addOwner(address newOwner) external onlyOwner {
+        require(newOwner != address(0) && !isOwner[newOwner], "Invalid new owner");
+        isOwner[newOwner] = true;
+        owners.push(newOwner);
+    }
+
+    function isTransactionConfirmed(bytes32 transactionHash, address signer) external view returns (bool) {
+        uint256 count = 0;
+        for (uint256 i = 0; i < owners.length; i++) {
+            if (isOwner[owners[i]] && ERC20(owners[i]).getTransactionConfirmationStatus(transactionHash)) {
+                count++;
+                if (count == requiredSignatures) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+}
+
+// AssetTokenizationContract with MultiSignature integration
+contract AssetTokenizationContract is ERC20, ERC6551Account, MultiSignature {
+    address public assetCompanyWallet;
+    uint256 public gasFee;
+    string public renewableIDCreditsType;
+    string public renewableCreditsType;
+
+    constructor(
+        address _assetCompanyWallet,
+        uint256 _initialGasFee,
+        address[] memory _multiSigOwners,
+        uint256 _requiredSignatures,
+        string memory _renewableIDCreditsType,
+        string memory _renewableCreditsType
+    ) ERC20("Unified Stable Asset Tokens", "USAT") MultiSignature(_multiSigOwners, _requiredSignatures) {
+        assetCompanyWallet = _assetCompanyWallet;
+        gasFee = _initialGasFee;
+        renewableIDCreditsType = _renewableIDCreditsType;
+        renewableCreditsType = _renewableCreditsType;
+    }
+
+    function multiSigTransferWithGasFee(address to, uint256 amount, bytes32 transactionHash) external nonReentrant onlyOwner {
+        require(isTransactionConfirmed(transactionHash, msg.sender), "Transaction not confirmed");
+
+        uint256 totalAmount = amount + gasFee;
+        require(balanceOf(address(this)) >= totalAmount, "Insufficient balance for transfer");
+
+        _transfer(address(this), to, amount);
+        _transfer(address(this), assetCompanyWallet, gasFee);
+    }
+
+    function setGasFee(uint256 _newGasFee) external onlyOwner {
+        gasFee = _newGasFee;
+    }
+
+    function setAssetCompanyWallet(address _newAssetCompanyWallet) external onlyOwner {
+        require(_newAssetCompanyWallet != address(0), "Invalid address");
+        assetCompanyWallet = _newAssetCompanyWallet;
+    }
+
+    function setRenewableIDCreditsType(string memory _newRenewableIDCreditsType) external onlyOwner {
+        renewableIDCreditsType = _newRenewableIDCreditsType;
+    }
+
+    function setRenewableCreditsType(string memory _newRenewableCreditsType) external onlyOwner {
+        renewableCreditsType = _newRenewableCreditsType;
+    }
+
+    // Fallback function to handle incoming Ether transactions
+    receive() external payable {
+        // Handle incoming Ether transactions if needed
+        // You might want to emit an event or perform some specific logic
+    }
+}
