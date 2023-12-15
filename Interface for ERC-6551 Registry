@@ -3,85 +3,72 @@
 
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/interfaces/IERC1271.sol";
-import "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 
 interface IERC6551Account {
-    // Interface for token-bound account functionality
-    // ...
+    function isValidSigner(address signer) external view returns (bool);
 }
 
 interface IERC6551Executable {
-    // Interface for executing transactions in a token-bound account
-    // ...
+    function execute(address to, uint256 value, bytes calldata data) external payable returns (bytes memory result);
 }
 
-contract ERC6551Account is IERC165, IERC1271, IERC6551Account, IERC6551Executable {
+contract ERC6551Account is Ownable, IERC1271, IERC6551Account, IERC6551Executable, ReentrancyGuard {
+    using ECDSA for bytes32;
+    using SafeMath for uint256;
+
+    uint256 private constant MAX_UINT256 = type(uint256).max;
+
     uint256 public state;
+    uint256 public maxGasCost = 1000000; // Example: Set a reasonable maximum gas cost.
 
     receive() external payable {}
 
-    function execute(address to, uint256 value, bytes calldata data, uint8 operation)
+    function execute(address to, uint256 value, bytes calldata data)
         external
         payable
-        virtual
+        onlyOwner
+        nonReentrant
         returns (bytes memory result)
     {
-        _validateSigner();
-        _validateOperation(operation);
-
-        state++;
-
+        require(gasleft() >= maxGasCost, "Gas limit exceeded");
+        state = state.add(1);
         (bool success, bytes memory resultData) = to.call{value: value}(data);
         require(success, "Transaction execution failed");
-
         return resultData;
     }
 
-    function isValidSigner(address signer, bytes calldata) external view virtual returns (bytes4) {
-        return _isValidSigner(signer) ? IERC6551Account.isValidSigner.selector : bytes4(0);
+    function isValidSigner(address signer) external view override returns (bool) {
+        return signer == owner();
     }
 
-    function isValidSignature(bytes32 hash, bytes memory signature)
-        external
-        view
-        virtual
-        returns (bytes4 magicValue)
-    {
-        require(SignatureChecker.isValidSignatureNow(owner(), hash, signature), "Invalid signature");
-
+    function isValidSignature(bytes32 hash, bytes memory signature) external view override returns (bytes4) {
+        require(hash.toEthSignedMessageHash().recover(signature) == owner(), "Invalid signature");
         return IERC1271.isValidSignature.selector;
     }
 
-    function supportsInterface(bytes4 interfaceId) external pure virtual returns (bool) {
+    function supportsInterface(bytes4 interfaceId) external pure override returns (bool) {
         return
-            interfaceId == type(IERC165).interfaceId ||
+            interfaceId == type(IERC1271).interfaceId ||
             interfaceId == type(IERC6551Account).interfaceId ||
-            interfaceId == type(IERC6551Executable).interfaceId;
+            interfaceId == type(IERC6551Executable).interfaceId ||
+            interfaceId == type(ReentrancyGuard).interfaceId ||
+            super.supportsInterface(interfaceId);
     }
 
-    function token() public view virtual returns (uint256, address, uint256) {
+    function token() external view override returns (uint256, address, uint256) {
         // Actual implementation needed for your specific use case
         return (0, address(0), 0);
     }
 
-    function owner() public view virtual returns (address) {
-        // Actual implementation needed for your specific use case
-        return address(0);
-    }
-
-    function _isValidSigner(address signer) internal view virtual returns (bool) {
-        return signer == owner();
-    }
-
-    function _validateSigner() internal view {
-        require(_isValidSigner(msg.sender), "Invalid signer");
-    }
-
-    function _validateOperation(uint8 operation) internal pure {
-        require(operation == 0, "Only call operations are supported");
+    function setMaxGasCost(uint256 _maxGasCost) external onlyOwner {
+        maxGasCost = _maxGasCost;
     }
 }
+
 
