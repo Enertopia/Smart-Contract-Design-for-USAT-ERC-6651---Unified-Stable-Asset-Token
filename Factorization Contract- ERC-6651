@@ -12,81 +12,98 @@ interface IERC6651Account {
 }
 
 contract TitleChainRegistry is ERC721, ERC721Burnable, Ownable {
-    uint256 private tokenIdCounter;
+    using SafeMath for uint256;
 
-    mapping(uint256 => string) private assetTitles;
-    mapping(uint256 => mapping(bytes32 => string)) private assetAttachments;
-    mapping(uint256 => address) private factorizationContracts;
+    uint256 private tokenIdCounter;
+    mapping(uint256 => AssetInfo) private assetInfo;
+
+    struct AssetInfo {
+        string title;
+        mapping(bytes32 => string) attachments;
+        address factorizationContract;
+        string creditType;
+    }
 
     event FactorizationContractCreated(uint256 indexed tokenId, address factorizationContract);
 
     constructor() ERC721("TitleChain", "TC") {}
 
-    function mintUSAT(address to, string memory title) external onlyOwner {
+    function mintCredits(address to, string memory title, string memory creditType) external onlyOwner {
         uint256 tokenId = tokenIdCounter;
-        tokenIdCounter++;
+        tokenIdCounter = tokenIdCounter.add(1);
 
         _safeMint(to, tokenId);
-        assetTitles[tokenId] = title;
+        assetInfo[tokenId] = AssetInfo(title, creditType);
     }
 
-    function transferUSAT(address to, uint256 tokenId, string memory newTitle) external onlyOwner {
+    function transferCredits(address to, uint256 tokenId, string memory newTitle) external onlyOwner {
         require(_exists(tokenId), "Token does not exist");
+
+        AssetInfo storage info = assetInfo[tokenId];
 
         _burn(tokenId);
         _safeMint(to, tokenId);
-        assetTitles[tokenId] = newTitle;
-        factorizationContracts[tokenId] = address(0); // Clear factorization contract on transfer
+        info.title = newTitle;
+        info.factorizationContract = address(0); // Clear factorization contract on transfer
     }
 
     function getTitle(uint256 tokenId) external view returns (string memory) {
         require(_exists(tokenId), "Token does not exist");
-        return assetTitles[tokenId];
+        return assetInfo[tokenId].title;
     }
 
-    function validateSignature(uint256 tokenId, bytes32 hash, bytes calldata signature) external view {
+    function getCreditType(uint256 tokenId) external view returns (string memory) {
+        require(_exists(tokenId), "Token does not exist");
+        return assetInfo[tokenId].creditType;
+    }
+
+    function validateCreditsSignature(uint256 tokenId, bytes32 hash, bytes calldata signature) external view {
         require(_exists(tokenId), "Token does not exist");
 
         address account = ownerOf(tokenId);
-
         IERC6651Account accountContract = IERC6651Account(account);
         require(accountContract.isValidSignature(hash, signature) == bytes4(0x20c13b0b), "Invalid signature");
+        // Additional validation logic for credits.
     }
 
     function attachAsset(uint256 tokenId, string memory key, string memory value) external onlyOwner {
         require(_exists(tokenId), "Token does not exist");
+        AssetInfo storage info = assetInfo[tokenId];
         bytes32 keyHash = keccak256(abi.encodePacked(key));
-        assetAttachments[tokenId][keyHash] = value;
+        info.attachments[keyHash] = value;
     }
 
     function getAsset(uint256 tokenId, string memory key) external view returns (string memory) {
         require(_exists(tokenId), "Token does not exist");
         bytes32 keyHash = keccak256(abi.encodePacked(key));
-        return assetAttachments[tokenId][keyHash];
+        return assetInfo[tokenId].attachments[keyHash];
     }
 
     function updateAsset(uint256 tokenId, string memory key, string memory newValue) external onlyOwner {
         require(_exists(tokenId), "Token does not exist");
+        AssetInfo storage info = assetInfo[tokenId];
         bytes32 keyHash = keccak256(abi.encodePacked(key));
-        assetAttachments[tokenId][keyHash] = newValue;
+        info.attachments[keyHash] = newValue;
     }
 
     function removeAsset(uint256 tokenId, string memory key) external onlyOwner {
         require(_exists(tokenId), "Token does not exist");
+        AssetInfo storage info = assetInfo[tokenId];
         bytes32 keyHash = keccak256(abi.encodePacked(key));
-        delete assetAttachments[tokenId][keyHash];
+        delete info.attachments[keyHash];
     }
 
     function createFactorizationContract(uint256 tokenId, address factorizationContract) external onlyOwner {
         require(_exists(tokenId), "Token does not exist");
-        require(factorizationContracts[tokenId] == address(0), "Factorization contract already exists");
+        AssetInfo storage info = assetInfo[tokenId];
+        require(info.factorizationContract == address(0), "Factorization contract already exists");
 
-        factorizationContracts[tokenId] = factorizationContract;
+        info.factorizationContract = factorizationContract;
         emit FactorizationContractCreated(tokenId, factorizationContract);
     }
 
     function getFactorizationContract(uint256 tokenId) external view returns (address) {
         require(_exists(tokenId), "Token does not exist");
-        return factorizationContracts[tokenId];
+        return assetInfo[tokenId].factorizationContract;
     }
 }
