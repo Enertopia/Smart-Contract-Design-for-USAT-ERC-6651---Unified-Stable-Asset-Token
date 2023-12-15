@@ -1,0 +1,56 @@
+// SPDX-License-Identifier: MIT
+// Copyright 2023 Emiliano German Solazzi Griminger
+pragma solidity ^0.8.0;
+
+contract EnergyTokenization {
+
+  MintableToken public usatToken;
+  MintableToken public tcToken;  
+
+  address public admin;
+
+  constructor() {
+    admin = msg.sender;
+    usatToken = new MintableToken("USAT", "USAT", 18);
+    tcToken = new MintableToken("TC", "TC", 18);
+  }
+
+  modifier onlyAdmin() {
+    require(msg.sender == admin, "Only admin");
+    _;
+  }
+
+  function issueUSAT(address recipient, uint amount) external onlyAdmin {
+    usatToken.mint(recipient, amount);
+    emit USATMinted(recipient, amount);
+  }
+
+  function issueTC(address recipient, uint amount) external onlyAdmin {
+    tcToken.mint(recipient, amount);
+  }
+
+  function calculateUSATSIssuance() external onlyAdmin {
+    
+    // Existing code to calculate amounts
+
+    usatToken.mint(msg.sender, twentyYearsUSATIssuance);
+    tcToken.mint(msg.sender, twentyYearsTCTransactionValue);
+  }
+
+}
+
+contract MintableToken is ERC20, Ownable {
+
+  event USATMinted(address recipient, uint amount);
+  
+  constructor(string memory name, string memory symbol, uint8 decimals) 
+    ERC20(name, symbol) {
+    _setupDecimals(decimals);
+  }
+
+  function mint(address to, uint amount) external onlyOwner {
+    _mint(to, amount);
+    emit USATMinted(to, amount);
+  }
+
+}
