@@ -1,56 +1,96 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/security/Pausable.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 
-contract NFTMarketplace is ERC721, ReentrancyGuard, Ownable {
+contract AssetTokenization is ERC20, Pausable, Ownable {
+  
+  using SafeMath for uint;
 
-  struct Listing {
-    uint256 price;
-    address seller;
+  uint public registrationFee = 1 ether;
+
+  enum AssetType {
+    REAL_ESTATE, 
+    COMMODITIES,
+    COLLECTIBLES
   }
 
-  // Mapping from tokenId to listing
-  mapping(uint256 => Listing) public listings;
-
-  event NFTListed(uint256 tokenId, uint256 price);
-  event NFTSold(uint256 tokenId, address seller, address buyer, uint256 price);
-
-  constructor() ERC721("MyNFT", "MNFT") {}
-
-  function mintNFT(address to, uint256 tokenId) external onlyOwner {
-    _safeMint(to, tokenId);
+  struct Asset {
+    AssetType assetType;
+    string name;
+    uint initialSupply;
+    uint pricePerToken;
   }
 
-  function listNFT(uint256 tokenId, uint256 price) external nonReentrant {
-    require(ownerOf(tokenId) == msg.sender, "Only token owner can list");
-    require(!_exists(listings[tokenId]), "Already listed");
+  mapping(string => Asset) public assets;
 
-    listings[tokenId] = Listing(price, msg.sender);
+  event AssetRegistered(string name, uint initialSupply, uint pricePerToken);
+  event TokensMinted(address recipient, string assetName, uint amount);
 
-    emit NFTListed(tokenId, price);
+  constructor() ERC20("AssetToken", "AT") {}
+
+  function registerAsset(
+    AssetType _assetType,
+    string memory _name, 
+    uint _initialSupply,
+    uint _pricePerToken
+  ) external onlyOwner whenNotPaused {
+    
+    require(!_exists(assets[_name]), "Asset already exists"); 
+
+    assets[_name] = Asset({
+      assetType: _assetType,
+      name: _name,
+      initialSupply: _initialSupply,
+      pricePerToken: _pricePerToken
+    });
+
+    _mint(msg.sender, registrationFee);
+
+    emit AssetRegistered(_name, _initialSupply, _pricePerToken);
   }
 
-  function buyNFT(uint256 tokenId) external payable nonReentrant {
-    Listing memory listing = listings[tokenId];
+  function mintTokens(
+    address recipient,
+    string memory assetName,
+    uint amount
+  ) external onlyOwner whenNotPaused {
+    
+    assets[assetName].initialSupply = assets[assetName].initialSupply.add(amount);
 
-    require(_exists(listing), "Not listed");
-    require(msg.value >= listing.price, "Insufficient funds");
+    _mint(recipient, amount);
 
-    address seller = listing.seller;
-    address buyer = msg.sender;
+    emit TokensMinted(recipient, assetName, amount);
+  }
 
-    // Transfer NFT and funds
-    _transfer(seller, buyer, tokenId);
-    payable(seller).transfer(listing.price);
+  function transferFrom(address sender, address recipient, uint256 amount) public override whenNotPaused returns (bool) {
+    _transfer(sender, recipient, amount);
+    return true;
+  }
 
-    delete listings[tokenId];
+  function approve(address spender, uint256 amount) public override whenNotPaused returns (bool) {
+    _approve(msg.sender, spender, amount);
+    return true;
+  }
 
-    emit NFTSold(tokenId, seller, buyer, listing.price);
+  function burn(uint amount) public {
+    _burn(msg.sender, amount);
   }
   
-  // Other functions like setPrice() etc  
-}
+  function pause() public onlyOwner {
+    _pause();
+  }
 
+  function unpause() public onlyOwner {
+    _unpause();
+  }
+
+  function _exists(Asset memory asset) internal view returns (bool) {
+    return bytes(assets[asset.name].name).length > 0;
+  }
+
+  // Other ERC20 methods
+}
