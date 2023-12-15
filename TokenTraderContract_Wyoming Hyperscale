@@ -1,0 +1,56 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+
+contract NFTMarketplace is ERC721, ReentrancyGuard, Ownable {
+
+  struct Listing {
+    uint256 price;
+    address seller;
+  }
+
+  // Mapping from tokenId to listing
+  mapping(uint256 => Listing) public listings;
+
+  event NFTListed(uint256 tokenId, uint256 price);
+  event NFTSold(uint256 tokenId, address seller, address buyer, uint256 price);
+
+  constructor() ERC721("MyNFT", "MNFT") {}
+
+  function mintNFT(address to, uint256 tokenId) external onlyOwner {
+    _safeMint(to, tokenId);
+  }
+
+  function listNFT(uint256 tokenId, uint256 price) external nonReentrant {
+    require(ownerOf(tokenId) == msg.sender, "Only token owner can list");
+    require(!_exists(listings[tokenId]), "Already listed");
+
+    listings[tokenId] = Listing(price, msg.sender);
+
+    emit NFTListed(tokenId, price);
+  }
+
+  function buyNFT(uint256 tokenId) external payable nonReentrant {
+    Listing memory listing = listings[tokenId];
+
+    require(_exists(listing), "Not listed");
+    require(msg.value >= listing.price, "Insufficient funds");
+
+    address seller = listing.seller;
+    address buyer = msg.sender;
+
+    // Transfer NFT and funds
+    _transfer(seller, buyer, tokenId);
+    payable(seller).transfer(listing.price);
+
+    delete listings[tokenId];
+
+    emit NFTSold(tokenId, seller, buyer, listing.price);
+  }
+  
+  // Other functions like setPrice() etc  
+}
+
