@@ -22,49 +22,66 @@ contract CreditFutures is ERC20, ReentrancyGuard, AccessControl {
   CreditSupply public immutable totalCreditSupply;
 
   // Events
-  event CreditMinted(address indexed to, uint256 amount, bytes32 indexed creditTypeHash);
-  event CreditBurned(address indexed from, uint256 amount, bytes32 indexed creditTypeHash);
+  event CreditMinted(address indexed minter, address indexed to, uint256 amount, bytes32 indexed creditTypeHash);
+  event CreditBurned(address indexed burner, address indexed from, uint256 amount, bytes32 indexed creditTypeHash);
 
   constructor() ERC20("Credit Futures Token", "CFT") {
     _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
+    _setupRole(MINTER_ROLE, msg.sender);
+    _setupRole(BURNER_ROLE, msg.sender);
   }
 
   function mint(address to, uint256 amount, bytes32 creditTypeHash) external onlyMinter nonReentrant {
-   // Mint tokens
+    // Implement minting logic
+    _mint(to, amount);
+    totalCreditSupply.totalSupply += amount;
+    totalCreditSupply.creditTypeSupply[creditTypeHash] += amount;
+
+    emit CreditMinted(msg.sender, to, amount, creditTypeHash);
   }
 
   function burn(address from, uint256 amount, bytes32 creditTypeHash) external onlyBurner nonReentrant {
-   // Burn tokens 
+    // Implement burning logic
+    _burn(from, amount);
+    totalCreditSupply.totalSupply -= amount;
+    totalCreditSupply.creditTypeSupply[creditTypeHash] -= amount;
+
+    emit CreditBurned(msg.sender, from, amount, creditTypeHash);
   }
 
   // Admin functions
   function addMinter(address minter) external onlyAdmin {
-    // Grant minter role
+    grantRole(MINTER_ROLE, minter);
   }
 
   function removeMinter(address minter) external onlyAdmin {
-   // Revoke minter role
+    revokeRole(MINTER_ROLE, minter);
   }
 
   function addBurner(address burner) external onlyAdmin {
-    // Grant burner role
+    grantRole(BURNER_ROLE, burner);
   }
 
   function removeBurner(address burner) external onlyAdmin {
-    // Revoke burner role
+    revokeRole(BURNER_ROLE, burner);
   }
 
   // Modifiers
   modifier onlyMinter() {
-    // Check minter role
+    require(hasRole(MINTER_ROLE, msg.sender), "Caller is not a minter");
+    _;
   }
 
   modifier onlyBurner() {
-    // Check burner role
+    require(hasRole(BURNER_ROLE, msg.sender), "Caller is not a burner");
+    _;
   }
 
   modifier onlyAdmin() {
-    // Check admin role
+    require(hasRole(DEFAULT_ADMIN_ROLE, msg.sender), "Caller is not an admin");
+    _;
   }
+}
+
 
 }
