@@ -1,0 +1,109 @@
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.17;
+
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
+import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Burnable.sol";
+import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Pausable.sol";
+import "@openzeppelin/contracts/access/AccessControlEnumerable.sol";
+import "@openzeppelin/contracts/utils/Context.sol";
+import "@openzeppelin/contracts/utils/Counters.sol";
+
+contract RINPlatform is ERC721, AccessControlEnumerable, ERC721Enumerable, ERC721Burnable, ERC721Pausable {
+    using Counters for Counters.Counter;
+
+    // Access control roles
+    bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
+    bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
+
+    // Counter for auto-incrementing token IDs
+    Counters.Counter private _rinIdTracker;
+
+    // Rate limit parameters
+    mapping(address => uint256) public dailyRINcounter;
+    mapping(address => uint256) public batchCounter;
+
+    // Events
+    event RINCreated(address indexed _creator, uint256 _rinId);
+    event RINBatchCreated(address indexed _creator, uint256[] _rinIds);
+
+    // Errors
+    error InvalidRINValue(uint256 _value);
+    error RateLimitExceeded(uint256 _requested, uint256 _maxPerHour);
+    error InvalidBatchSize(address indexed _sender, uint256 _length, uint256 _maxSize);
+    error WeeklyRateLimitReached(address indexed _sender);
+
+    // Constructor
+    constructor(
+        string memory name,
+        string memory symbol,
+        string memory baseTokenURI
+    ) ERC721(name, symbol) {
+        _setupRole(DEFAULT_ADMIN_ROLE, _msgSender());
+        _setupRole(MINTER_ROLE, _msgSender());
+        _setupRole(PAUSER_ROLE, _msgSender());
+        _setBaseURI(baseTokenURI);
+    }
+
+    // ERC721PresetMinterPauserAutoId's mint function
+    function mint(address to) public virtual {
+        require(hasRole(MINTER_ROLE, _msgSender()), "RINPlatform: must have minter role to mint");
+        _safeMint(to, _rinIdTracker.current());
+        _rinIdTracker.increment();
+        emit RINCreated(to, _rinIdTracker.current() - 1);
+    }
+
+    // ERC721PresetMinterPauserAutoId's pause function
+    function pause() public virtual {
+        require(hasRole(PAUSER_ROLE, _msgSender()), "RINPlatform: must have pauser role to pause");
+        _pause();
+    }
+
+    // ERC721PresetMinterPauserAutoId's unpause function
+    function unpause() public virtual {
+        require(hasRole(PAUSER_ROLE, _msgSender()), "RINPlatform: must have pauser role to unpause");
+        _unpause();
+    }
+
+    // ERC721PresetMinterPauserAutoId's _beforeTokenTransfer function
+    function _beforeTokenTransfer(
+        address from,
+        address to,
+        uint256 tokenId
+    ) internal virtual override(ERC721, ERC721Enumerable, ERC721Pausable) {
+        super._beforeTokenTransfer(from, to, tokenId);
+    }
+
+    // ERC721PresetMinterPauserAutoId's supportsInterface function
+    function supportsInterface(bytes4 interfaceId)
+        public
+        view
+        virtual
+        override(AccessControlEnumerable, ERC721, ERC721Enumerable)
+        returns (bool)
+    {
+        return super.supportsInterface(interfaceId);
+    }
+
+    // RINPlatform's createIndividualRIN function
+    function createIndividualRIN(uint256 _value) external {
+        if (_value <= 0) revert InvalidRINValue(_value);
+
+        if (dailyRINcounter[msg.sender] >= 50) revert RateLimitExceeded({_requested: 1, _maxPerHour: 50});
+
+        mint(msg.sender);
+        dailyRINcounter[msg.sender]++;
+    }
+
+    // RINPlatform's createRINBatch function
+    function createRINBatch(uint256[] calldata _values) external {
+        if (_values.length > 20) revert InvalidBatchSize(msg.sender, _values.length, 20);
+
+        if (batchCounter[msg.sender] >= 5) revert WeeklyRateLimitReached(msg.sender);
+
+        for (uint256 i = 0; i < _values.length; i++) {
+            mint(msg.sender);
+        }
+        batchCounter[msg.sender]++;
+    }
+}
