@@ -1,3 +1,4 @@
+```solidity
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
@@ -33,3 +34,4 @@ contract USAT is ERC20, Ownable, Pausable {
         return super.transferFrom(sender, recipient, amount);
     }
 }
+```
