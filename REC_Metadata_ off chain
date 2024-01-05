@@ -1,0 +1,13 @@
+{
+  "nft_id": "0xabcdef123456",
+  "energy_source": "Wind",
+  "energy_amount_kwh": 500,
+  "generation_date": "2023-01-15",
+  "expiration_date": "2025-01-15",
+  "certification_standard": "Green-e",
+  "certifying_body": "Renewable Energy Certification Institute (RECI)",
+  "oracle_data": {
+    "random_value": 123456,
+    "other_dynamic_data": "..."
+  }
+}
