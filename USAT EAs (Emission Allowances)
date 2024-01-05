@@ -1,0 +1,70 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+
+contract EmissionAllowances is ERC20, Ownable {
+    // Token details
+    string public constant NAME = "USAT Emission Allowances";
+    string public constant SYMBOL = "USAT-EA";
+    uint8 public constant DECIMALS = 18;
+
+    // Struct representing Emission Allowance metadata
+    struct EmissionAllowanceMetadata {
+        string assetRequirement;
+        string assetDescription;
+        string market;
+        string assetPrice;  // Variable (Market Dependent)
+        string usatScore;
+    }
+
+    // Mapping from token ID to its metadata
+    mapping(uint256 => EmissionAllowanceMetadata) public tokenMetadata;
+
+    // Event emitted when a new token with metadata is minted
+    event EmissionAllowanceMinted(
+        uint256 indexed tokenId,
+        address indexed owner,
+        string assetRequirement,
+        string assetDescription,
+        string market,
+        string assetPrice,
+        string usatScore
+    );
+
+    // Constructor to initialize the contract
+    constructor() ERC20(NAME, SYMBOL) {}
+
+    // Function to mint new Emission Allowances with metadata
+    function mintEmissionAllowance(
+        address account,
+        uint256 amount,
+        uint256 tokenId,
+        string memory assetRequirement,
+        string memory assetDescription,
+        string memory market,
+        string memory assetPrice,
+        string memory usatScore
+    ) external onlyOwner {
+        _mint(account, amount);
+
+        tokenMetadata[tokenId] = EmissionAllowanceMetadata({
+            assetRequirement: assetRequirement,
+            assetDescription: assetDescription,
+            market: market,
+            assetPrice: assetPrice,
+            usatScore: usatScore
+        });
+
+        emit EmissionAllowanceMinted(
+            tokenId,
+            account,
+            assetRequirement,
+            assetDescription,
+            market,
+            assetPrice,
+            usatScore
+        );
+    }
+}
