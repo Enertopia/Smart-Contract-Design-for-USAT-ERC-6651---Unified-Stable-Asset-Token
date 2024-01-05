@@ -1,0 +1,11 @@
+{
+  "name": "California Carbon Offset #1",
+  "description": "USAT California Carbon Offset NFT",
+  "tokenId": 1,
+  "assetRequirement": "Compliance with California's cap-and-trade program.",
+  "assetDescription": "Credits for offset projects under California's cap-and-trade program.",
+  "market": "Mandatory",
+  "assetPrice": "Variable (Market Dependent)",
+  "usatScore": "Based on compliance with California's environmental standards",
+  "image": "https://example.com/ccnft_1.png"
+}
