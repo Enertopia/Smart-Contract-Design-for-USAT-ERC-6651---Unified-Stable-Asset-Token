@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.16;
 
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
@@ -33,9 +33,9 @@ contract EmissionAllowances is ERC721, Ownable {
     );
 
     // Constructor to initialize the contract
-    constructor() ERC721(NAME, SYMBOL) Ownable(msg.sender) {}
+    constructor(address initialOwner) ERC721(NAME, SYMBOL) Ownable(initialOwner) {}
 
-    // Function to mint new Emission Allowances with metadata
+    // Function to mint new Emission Allowances NFTs with metadata
     function mintEmissionAllowance(
         address account,
         uint256 tokenId,
@@ -66,4 +66,3 @@ contract EmissionAllowances is ERC721, Ownable {
         );
     }
 }
-
