@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.17;
 
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract CaliforniaCarbonOffsets is ERC20, Ownable {
+contract CaliforniaCarbonOffsets is ERC721, Ownable {
     // Token details
     string public constant NAME = "USAT California Carbon Offsets";
     string public constant SYMBOL = "USAT-CCO";
-    uint8 public constant DECIMALS = 18;
 
     // Struct representing California Carbon Offsets metadata
     struct CaliforniaCarbonOffsetsMetadata {
@@ -34,12 +33,11 @@ contract CaliforniaCarbonOffsets is ERC20, Ownable {
     );
 
     // Constructor to initialize the contract
-    constructor() ERC20(NAME, SYMBOL) {}
+    constructor(address initialOwner) ERC721(NAME, SYMBOL) Ownable(initialOwner) {}
 
-    // Function to mint new California Carbon Offsets with metadata
+    // Function to mint new California Carbon Offsets NFTs with metadata
     function mintCaliforniaCarbonOffsets(
         address account,
-        uint256 amount,
         uint256 tokenId,
         string memory assetRequirement,
         string memory assetDescription,
@@ -47,7 +45,7 @@ contract CaliforniaCarbonOffsets is ERC20, Ownable {
         string memory assetPrice,
         string memory usatScore
     ) external onlyOwner {
-        _mint(account, amount);
+        _mint(account, tokenId);
 
         tokenMetadata[tokenId] = CaliforniaCarbonOffsetsMetadata({
             assetRequirement: assetRequirement,
