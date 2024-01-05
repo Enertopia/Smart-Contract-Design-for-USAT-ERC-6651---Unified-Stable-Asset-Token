@@ -1,0 +1,84 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "@chainlink/contracts/src/v0.8/VRFConsumerBase.sol";
+import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+
+contract RenewableEnergyNFT is ERC721Enumerable, Ownable, VRFConsumerBase {
+    uint256 internal fee;
+    bytes32 internal keyHash;
+
+constructor(address _vrfCoordinator, address _linkToken, uint256 _fee, bytes32 _keyHash, address initialOwner)
+        ERC721("RenewableEnergyNFT", "RENFT")
+        VRFConsumerBase(_vrfCoordinator, _linkToken)
+        Ownable(initialOwner) // Add this line
+    {
+        fee = _fee;
+        keyHash = _keyHash;
+    }
+
+    struct RenewableEnergyMetadata {
+        string energy_source;
+        uint256 energy_amount_kwh;
+        string generation_date;
+        string expiration_date;
+        string certification_standard;
+        string certifying_body;
+        OracleData oracle_data;
+    }
+
+    struct OracleData {
+        uint256 random_value;
+        string other_dynamic_data;
+    }
+
+    mapping(uint256 => RenewableEnergyMetadata) private _tokenMetadata;
+    mapping(bytes32 => uint256) private _requestIdToTokenId;
+
+    event RenewableEnergyMinted(
+        uint256 indexed tokenId,
+        address indexed owner,
+        string energy_source,
+        uint256 energy_amount_kwh,
+        string generation_date,
+        string expiration_date,
+        string certification_standard,
+        string certifying_body,
+        OracleData oracle_data
+    );
+
+    function requestOracleData(uint256 tokenId) external {
+        require(LINK.balanceOf(address(this)) >= fee, "Not enough LINK tokens");
+        bytes32 requestId = requestRandomness(keyHash, fee);
+        _requestIdToTokenId[requestId] = tokenId;
+    }
+
+    function fulfillRandomness(bytes32 requestId, uint256 randomness) internal override {
+        uint256 tokenId = _requestIdToTokenId[requestId];
+        _generateOracleData(tokenId, randomness);
+        _mintNFT(tokenId);
+    }
+
+    function _generateOracleData(uint256 tokenId, uint256 randomness) internal {
+        _tokenMetadata[tokenId].oracle_data = OracleData({
+            random_value: randomness,
+            other_dynamic_data: "..."
+        });
+    }
+
+    function _mintNFT(uint256 tokenId) internal {
+        _mint(msg.sender, tokenId);
+        emit RenewableEnergyMinted(
+            tokenId,
+            msg.sender,
+            _tokenMetadata[tokenId].energy_source,
+            _tokenMetadata[tokenId].energy_amount_kwh,
+            _tokenMetadata[tokenId].generation_date,
+            _tokenMetadata[tokenId].expiration_date,
+            _tokenMetadata[tokenId].certification_standard,
+            _tokenMetadata[tokenId].certifying_body,
+            _tokenMetadata[tokenId].oracle_data
+        );
+    }
+}
