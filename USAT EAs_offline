@@ -1,0 +1,8 @@
+{
+  "tokenId": 1,
+  "assetRequirement": "Compliance with emission standards.",
+  "assetDescription": "Allowances for a certain amount of emissions under cap-and-trade programs.",
+  "market": "Mandatory, OTC",
+  "assetPrice": "Variable (Market Dependent)",
+  "usatScore": "Based on emission reduction achievements"
+}
