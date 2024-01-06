@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.15;
 
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract VerifiedCarbonUnits is ERC20, Ownable {
+contract VerifiedCarbonUnits is ERC721, Ownable {
     // Token details
     string public constant NAME = "USAT Verified Carbon Units";
     string public constant SYMBOL = "USAT-VCU";
-    uint8 public constant DECIMALS = 18;
 
     // Struct representing Verified Carbon Units metadata
     struct VerifiedCarbonUnitsMetadata {
@@ -34,12 +33,11 @@ contract VerifiedCarbonUnits is ERC20, Ownable {
     );
 
     // Constructor to initialize the contract
-    constructor() ERC20(NAME, SYMBOL) {}
+    constructor(address initialOwner) ERC721(NAME, SYMBOL) Ownable(initialOwner) {}
 
-    // Function to mint new Verified Carbon Units with metadata
+    // Function to mint new Verified Carbon Units NFTs with metadata
     function mintVerifiedCarbonUnits(
         address account,
-        uint256 amount,
         uint256 tokenId,
         string memory assetRequirement,
         string memory assetDescription,
@@ -47,7 +45,7 @@ contract VerifiedCarbonUnits is ERC20, Ownable {
         string memory assetPrice,
         string memory usatScore
     ) external onlyOwner {
-        _mint(account, amount);
+        _mint(account, tokenId);
 
         tokenMetadata[tokenId] = VerifiedCarbonUnitsMetadata({
             assetRequirement: assetRequirement,
