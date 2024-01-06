@@ -1,0 +1,68 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.17;
+
+import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+
+contract USAT45QTaxCreditsNFT is ERC721Enumerable, Ownable {
+    // Token details
+    string public constant NAME = "USAT 45Q Tax Credits";
+    string public constant SYMBOL = "USAT-45Q";
+
+    // Struct representing NFT metadata
+    struct NFTMetadata {
+        string assetRequirement;
+        string assetDescription;
+        string market;
+        string assetPrice;
+        string usatScore;
+    }
+
+    // Mapping from token ID to its metadata
+    mapping(uint256 => NFTMetadata) public tokenMetadata;
+
+    // Event emitted when a new token with metadata is minted
+    event NFTMinted(
+        uint256 indexed tokenId,
+        address indexed owner,
+        string assetRequirement,
+        string assetDescription,
+        string market,
+        string assetPrice,
+        string usatScore
+    );
+
+    // Constructor to initialize the contract
+    constructor(address initialOwner) ERC721(NAME, SYMBOL) Ownable(initialOwner) {}
+
+    // Function to mint new NFTs with metadata
+    function mintNFT(
+        address account,
+        uint256 tokenId,
+        string memory assetRequirement,
+        string memory assetDescription,
+        string memory market,
+        string memory assetPrice,
+        string memory usatScore
+    ) external onlyOwner {
+        _mint(account, tokenId);
+
+        tokenMetadata[tokenId] = NFTMetadata({
+            assetRequirement: assetRequirement,
+            assetDescription: assetDescription,
+            market: market,
+            assetPrice: assetPrice,
+            usatScore: usatScore
+        });
+
+        emit NFTMinted(
+            tokenId,
+            account,
+            assetRequirement,
+            assetDescription,
+            market,
+            assetPrice,
+            usatScore
+        );
+    }
+}
