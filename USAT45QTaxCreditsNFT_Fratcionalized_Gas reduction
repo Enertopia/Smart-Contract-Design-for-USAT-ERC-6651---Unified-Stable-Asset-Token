@@ -1,0 +1,76 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.17;
+
+import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
+import "@openzeppelin/contracts/token/ERC721/extensions/IERC721Enumerable.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+
+// USAT45QTaxCreditsNFT contract definition
+contract USAT45QTaxCreditsNFT is ERC721Enumerable, Ownable {
+    string private constant NAME = "USAT 45Q Tax Credits";
+    string private constant SYMBOL = "USAT-45Q";
+
+    struct NFTMetadata {
+        string assetRequirement;
+        string assetDescription;
+        string market;
+        string assetPrice;
+        string usatScore;
+    }
+
+    mapping(uint256 => NFTMetadata) public tokenMetadata;
+
+    event NFTMinted(
+        uint256 indexed tokenId,
+        address indexed owner,
+        string assetRequirement,
+        string assetDescription,
+        string market,
+        string assetPrice,
+        string usatScore
+    );
+
+    constructor(address initialOwner) ERC721(NAME, SYMBOL) Ownable(initialOwner) {}
+
+    function mintNFT(
+        address account,
+        uint256 tokenId,
+        string memory assetRequirement,
+        string memory assetDescription,
+        string memory market,
+        string memory assetPrice,
+        string memory usatScore
+    ) external onlyOwner {
+        _mint(account, tokenId);
+        tokenMetadata[tokenId] = NFTMetadata(assetRequirement, assetDescription, market, assetPrice, usatScore);
+        emit NFTMinted(tokenId, account, assetRequirement, assetDescription, market, assetPrice, usatScore);
+    }
+}
+
+// FractionalNFT contract definition
+contract FractionalNFT is ERC721Enumerable, Ownable {
+    IERC721Enumerable private originalNFT;
+    mapping(uint256 => uint256[]) public fractions;
+
+    event NFTFractionalized(address indexed owner, uint256 originalTokenId, uint256[] fractionalTokenIds);
+
+    constructor(address _originalNFT, address initialOwner) ERC721("Fractional NFT", "F-NFT") Ownable(initialOwner) {
+        originalNFT = IERC721Enumerable(_originalNFT);
+    }
+
+    modifier onlyOriginalNFTOwner(uint256 tokenId) {
+        require(originalNFT.ownerOf(tokenId) == msg.sender, "FractionalNFT: Caller is not the owner of the original NFT");
+        _;
+    }
+
+    function fractionalizeNFT(uint256 originalTokenId, uint256 fractionsCount) external onlyOriginalNFTOwner(originalTokenId) {
+        uint256[] memory fractionalTokenIds = new uint256[](fractionsCount);
+        for (uint256 i = 0; i < fractionsCount; i++) {
+            uint256 fractionalTokenId = totalSupply() + 1;
+            _mint(msg.sender, fractionalTokenId);
+            fractionalTokenIds[i] = fractionalTokenId;
+        }
+        fractions[originalTokenId] = fractionalTokenIds;
+        emit NFTFractionalized(msg.sender, originalTokenId, fractionalTokenIds);
+    }
+}
