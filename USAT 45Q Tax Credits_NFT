@@ -1,5 +1,5 @@
-/ SPDX-License-Identifier: MIT
-pragma solidity ^0.8.17;
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721EnumerableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
@@ -36,8 +36,7 @@ contract USAT45QTaxCreditsNFT is Initializable, ERC721EnumerableUpgradeable, Own
     // Initialize the contract
     function initialize(address initialOwner) public initializer {
         __ERC721_init(NAME, SYMBOL);
-        __Ownable_init_unchained(initialOwner); // Pass initialOwner as an argument
-        transferOwnership(initialOwner);
+        __Ownable_init_unchained(initialOwner);
     }
 
     // Function to mint new NFTs with metadata
@@ -69,5 +68,13 @@ contract USAT45QTaxCreditsNFT is Initializable, ERC721EnumerableUpgradeable, Own
             assetPrice,
             usatScore
         );
+    }
+
+    // Helper function to translate proxy token ID to DAO token ID
+    function idToDAO(uint256 proxyTokenId) public pure returns (uint256 daoTokenId) {
+        // Perform the necessary translation logic here to extract the release ID from proxyTokenId
+        // For example, daoTokenId = proxyTokenId >> 100; // Assuming the release ID is in the upper bits
+        // Adjust the shift and mask based on your serialization format
+        daoTokenId = proxyTokenId; // Placeholder logic, replace with actual logic
     }
 }
