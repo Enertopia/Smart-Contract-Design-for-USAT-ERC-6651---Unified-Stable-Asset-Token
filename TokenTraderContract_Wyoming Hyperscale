@@ -1,96 +1,96 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "@openzeppelin/contracts/security/Pausable.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
-contract AssetTokenization is ERC20, Pausable, Ownable {
-  
-  using SafeMath for uint;
+contract AssetTokenization is Initializable, ERC20Upgradeable, PausableUpgradeable, OwnableUpgradeable {
+    uint public registrationFee;
+    uint private profitPool;
 
-  uint public registrationFee = 1 ether;
+    enum AssetType { REAL_ESTATE, COMMODITIES, COLLECTIBLES }
+    enum ComplianceStatus { PENDING, COMPLIANT, NONCOMPLIANT }
 
-  enum AssetType {
-    REAL_ESTATE, 
-    COMMODITIES,
-    COLLECTIBLES
-  }
+    struct Asset {
+        AssetType assetType;
+        string name;
+        uint initialSupply;
+        uint pricePerToken;
+        ComplianceStatus complianceStatus;
+    }
 
-  struct Asset {
-    AssetType assetType;
-    string name;
-    uint initialSupply;
-    uint pricePerToken;
-  }
+    mapping(string => Asset) public assets;
+    mapping(address => uint) public investments;
 
-  mapping(string => Asset) public assets;
+    event AssetRegistered(string name, AssetType assetType, uint initialSupply, uint pricePerToken, ComplianceStatus complianceStatus);
+    event TokensMinted(address recipient, string assetName, uint amount);
+    event InvestmentReceived(address investor, string assetName, uint amount);
+    event ProfitDistributed(uint profitAmount);
 
-  event AssetRegistered(string name, uint initialSupply, uint pricePerToken);
-  event TokensMinted(address recipient, string assetName, uint amount);
+    function initialize() public initializer {
+        __ERC20_init("AssetToken", "AT");
+        __Pausable_init();
+        __Ownable_init();
+        registrationFee = 1 ether;
+        profitPool = 0;
+    }
 
-  constructor() ERC20("AssetToken", "AT") {}
+    function registerAsset(AssetType _assetType, string memory _name, uint _initialSupply, uint _pricePerToken) external onlyOwner whenNotPaused {
+        require(bytes(assets[_name].name).length == 0, "Asset already exists");
+        assets[_name] = Asset({
+            assetType: _assetType,
+            name: _name,
+            initialSupply: _initialSupply,
+            pricePerToken: _pricePerToken,
+            complianceStatus: ComplianceStatus.PENDING
+        });
+        emit AssetRegistered(_name, _assetType, _initialSupply, _pricePerToken, ComplianceStatus.PENDING);
+    }
 
-  function registerAsset(
-    AssetType _assetType,
-    string memory _name, 
-    uint _initialSupply,
-    uint _pricePerToken
-  ) external onlyOwner whenNotPaused {
-    
-    require(!_exists(assets[_name]), "Asset already exists"); 
+    function setComplianceStatus(string memory _name, ComplianceStatus _status) external onlyOwner {
+        require(bytes(assets[_name].name).length > 0, "Asset does not exist");
+        assets[_name].complianceStatus = _status;
+    }
 
-    assets[_name] = Asset({
-      assetType: _assetType,
-      name: _name,
-      initialSupply: _initialSupply,
-      pricePerToken: _pricePerToken
-    });
+    function investInAsset(string memory assetName, uint amount) public payable whenNotPaused {
+        Asset memory asset = assets[assetName];
+        require(asset.complianceStatus == ComplianceStatus.COMPLIANT, "Asset not compliant");
+        require(msg.value == amount.mul(asset.pricePerToken), "Incorrect payment");
+        
+        uint tokensToMint = amount.mul(asset.pricePerToken);
+        _mint(msg.sender, tokensToMint);
+        investments[msg.sender] = investments[msg.sender].add(tokensToMint);
+        
+        emit InvestmentReceived(msg.sender, assetName, amount);
+    }
 
-    _mint(msg.sender, registrationFee);
+    function distributeProfits() public onlyOwner {
+        uint totalSupply = totalSupply();
+        require(totalSupply > 0, "No tokens minted");
+        require(profitPool > 0, "No profit to distribute");
 
-    emit AssetRegistered(_name, _initialSupply, _pricePerToken);
-  }
+        for (uint i = 0; i < totalSupply; i++) {
+            address shareholder = ownerOf(i);
+            uint shareholderBalance = balanceOf(shareholder);
+            uint profitShare = profitPool.mul(shareholderBalance).div(totalSupply);
+            payable(shareholder).transfer(profitShare);
+        }
 
-  function mintTokens(
-    address recipient,
-    string memory assetName,
-    uint amount
-  ) external onlyOwner whenNotPaused {
-    
-    assets[assetName].initialSupply = assets[assetName].initialSupply.add(amount);
+        emit ProfitDistributed(profitPool);
+        profitPool = 0; // Reset the profit pool after distribution
+    }
 
-    _mint(recipient, amount);
+    function addProfits(uint _amount) public onlyOwner {
+        profitPool = profitPool.add(_amount);
+    }
 
-    emit TokensMinted(recipient, assetName, amount);
-  }
+    function updateRegistrationFee(uint _fee) public onlyOwner {
+        registrationFee = _fee;
+    }
 
-  function transferFrom(address sender, address recipient, uint256 amount) public override whenNotPaused returns (bool) {
-    _transfer(sender, recipient, amount);
-    return true;
-  }
-
-  function approve(address spender, uint256 amount) public override whenNotPaused returns (bool) {
-    _approve(msg.sender, spender, amount);
-    return true;
-  }
-
-  function burn(uint amount) public {
-    _burn(msg.sender, amount);
-  }
-  
-  function pause() public onlyOwner {
-    _pause();
-  }
-
-  function unpause() public onlyOwner {
-    _unpause();
-  }
-
-  function _exists(Asset memory asset) internal view returns (bool) {
-    return bytes(assets[asset.name].name).length > 0;
-  }
-
-  // Other ERC20 methods
+    // Override required functions from parent contracts
+    // Additional logic for pausing, unpausing, minting, and burning tokens
 }
+
