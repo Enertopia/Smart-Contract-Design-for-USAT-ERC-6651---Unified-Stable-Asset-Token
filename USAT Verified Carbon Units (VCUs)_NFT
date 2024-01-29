@@ -1,14 +1,18 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.15;
 
-import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721URIStorageUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
-contract VerifiedCarbonUnits is ERC721, Ownable {
-    // Token details
-    string public constant NAME = "USAT Verified Carbon Units";
-    string public constant SYMBOL = "USAT-VCU";
-
+/**
+ * @title Verified Carbon Units
+ * @dev This contract represents NFTs tied to verified carbon units, incorporating upgradeability and legal clarity.
+ * The terms encoded in this contract are intended to reflect a Ricardian contract, ensuring that each NFT represents
+ * a genuine carbon offset unit, with metadata providing details such as the asset's requirement, description, market,
+ * price, and an environmental sustainability score (usatScore).
+ */
+contract VerifiedCarbonUnits is Initializable, ERC721URIStorageUpgradeable, OwnableUpgradeable {
     // Struct representing Verified Carbon Units metadata
     struct VerifiedCarbonUnitsMetadata {
         string assetRequirement;
@@ -32,8 +36,11 @@ contract VerifiedCarbonUnits is ERC721, Ownable {
         string usatScore
     );
 
-    // Constructor to initialize the contract
-    constructor(address initialOwner) ERC721(NAME, SYMBOL) Ownable(initialOwner) {}
+    function initialize() public initializer {
+        __ERC721URIStorage_init();
+        __ERC721_init("USAT Verified Carbon Units", "USAT-VCU");
+        __Ownable_init();
+    }
 
     // Function to mint new Verified Carbon Units NFTs with metadata
     function mintVerifiedCarbonUnits(
@@ -44,7 +51,7 @@ contract VerifiedCarbonUnits is ERC721, Ownable {
         string memory market,
         string memory assetPrice,
         string memory usatScore
-    ) external onlyOwner {
+    ) public onlyOwner {
         _mint(account, tokenId);
 
         tokenMetadata[tokenId] = VerifiedCarbonUnitsMetadata({
@@ -65,4 +72,6 @@ contract VerifiedCarbonUnits is ERC721, Ownable {
             usatScore
         );
     }
+    
+    // Additional functions for managing Verified Carbon Units NFTs can be added here.
 }
