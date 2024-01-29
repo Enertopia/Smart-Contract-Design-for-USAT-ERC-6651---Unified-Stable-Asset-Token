@@ -6,26 +6,26 @@ import "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721Burnab
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/utils/math/SafeMathUpgradeable.sol";
-
-interface IERC6651AccountUpgradeable {
-    function isValidSignature(bytes32 hash, bytes calldata signature) external view returns (bytes4 magicValue);
-}
 
 contract TitleChainRegistryUpgradeable is Initializable, ERC721Upgradeable, ERC721BurnableUpgradeable, OwnableUpgradeable, UUPSUpgradeable {
-    using SafeMathUpgradeable for uint256;
-
     uint256 private tokenIdCounter;
     mapping(uint256 => AssetInfo) private assetInfo;
 
+    struct Attachment {
+        string key;
+        string value;
+    }
+
     struct AssetInfo {
         string title;
-        mapping(bytes32 => string) attachments;
-        address factorizationContract;
+        Attachment[] attachments; // Adjusted to use an array for easier external access
+        address factorizationContract; // Optional: Remove if unused
         string creditType;
     }
 
-    event FactorizationContractCreated(uint256 indexed tokenId, address factorizationContract);
+    event AssetMinted(uint256 indexed tokenId, address to, string title, string creditType);
+    event AssetAttached(uint256 indexed tokenId, string key, string value);
+    event FactorizationContractCreated(uint256 indexed tokenId, address factorizationContract); // Ensure usage or remove if unnecessary
 
     function initialize() public initializer {
         __ERC721_init("TitleChain", "TC");
@@ -35,31 +35,31 @@ contract TitleChainRegistryUpgradeable is Initializable, ERC721Upgradeable, ERC7
         tokenIdCounter = 0;
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {
+        // Consider implementing additional security measures like time locks or multi-signature requirements
+    }
 
     function mintCredits(address to, string memory title, string memory creditType) public onlyOwner {
-        uint256 tokenId = tokenIdCounter.add(1);
-        tokenIdCounter = tokenId;
+        tokenIdCounter += 1; // Simplified increment
+        uint256 tokenId = tokenIdCounter;
 
         _safeMint(to, tokenId);
         AssetInfo storage newAsset = assetInfo[tokenId];
         newAsset.title = title;
         newAsset.creditType = creditType;
 
-        // This action represents a binding agreement where the issuer (contract owner) assigns a specific title and credit type to the receiver.
-        // Legal implications of this transaction are detailed in the attached legal document, accessible via [External Legal Document Hash/Link].
+        emit AssetMinted(tokenId, to, title, creditType);
     }
-
-    // Additional functions (transferCredits, getTitle, etc.) adapted for upgradeability and Ricardian contracts follow the same pattern as mintCredits
 
     function attachAsset(uint256 tokenId, string memory key, string memory value) public onlyOwner {
         require(_exists(tokenId), "Token does not exist");
         AssetInfo storage info = assetInfo[tokenId];
-        bytes32 keyHash = keccak256(abi.encodePacked(key));
-        info.attachments[keyHash] = value;
-        // When attaching an asset, the action is legally binding under the terms detailed in [External Legal Document Hash/Link].
+        info.attachments.push(Attachment(key, value)); // Simplified attachment
+
+        emit AssetAttached(tokenId, key, value);
     }
 
-    // Implement other functions with similar considerations for upgradeability and Ricardian contract principles
+    // Consider adding batch operations for minting and attaching assets
 
+    // Placeholder for other functions (e.g., transferCredits, getTitle) with notes on upgradeability and Ricardian contracts as necessary
 }
