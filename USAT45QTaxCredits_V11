@@ -1,0 +1,89 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.17;
+
+import "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721EnumerableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+
+/**
+ * @title USAT45QTaxCreditsNFT Upgradeable Contract
+ * @dev Implements upgradeable NFT contract for USAT 45Q Tax Credits
+ */
+contract USAT45QTaxCreditsNFTUpgradeable is Initializable, ERC721EnumerableUpgradeable, OwnableUpgradeable {
+    string private constant NAME = "USAT 45Q Tax Credits";
+    string private constant SYMBOL = "USAT-45Q";
+
+    struct NFTMetadata {
+        string assetRequirement;
+        string assetDescription;
+        string market;
+        string assetPrice;
+        string usatScore;
+    }
+
+    mapping(uint256 => NFTMetadata) public tokenMetadata;
+
+    event NFTMinted(
+        uint256 indexed tokenId,
+        address indexed owner,
+        string assetRequirement,
+        string assetDescription,
+        string market,
+        string assetPrice,
+        string usatScore
+    );
+
+    /**
+     * @dev Initializes the contract replacing constructor. Must be called once upon deployment by the proxy.
+     * @param initialOwner The initial owner of the contract, who can mint NFTs and has admin rights.
+     */
+    function initialize(address initialOwner) public initializer {
+        __ERC721_init(NAME, SYMBOL);
+        __ERC721Enumerable_init();
+        __Ownable_init();
+        transferOwnership(initialOwner);
+    }
+
+    /**
+     * @dev Mints a new NFT with specific metadata.
+     * @param account The account to receive the NFT.
+     * @param tokenId The token ID for the new NFT.
+     * @param assetRequirement The asset requirement metadata.
+     * @param assetDescription The asset description metadata.
+     * @param market The market metadata.
+     * @param assetPrice The asset price metadata.
+     * @param usatScore The USAT score metadata.
+     */
+    function mintNFT(
+        address account,
+        uint256 tokenId,
+        string memory assetRequirement,
+        string memory assetDescription,
+        string memory market,
+        string memory assetPrice,
+        string memory usatScore
+    ) external onlyOwner {
+        _mint(account, tokenId);
+        tokenMetadata[tokenId] = NFTMetadata(
+            assetRequirement,
+            assetDescription,
+            market,
+            assetPrice,
+            usatScore
+        );
+        emit NFTMinted(
+            tokenId,
+            account,
+            assetRequirement,
+            assetDescription,
+            market,
+            assetPrice,
+            usatScore
+        );
+    }
+}
+
+        fractions[originalTokenId] = fractionalTokenIds;
+        emit NFTFractionalized(msg.sender, originalTokenId, fractionalTokenIds);
+    }
+}
