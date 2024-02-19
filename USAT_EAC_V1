@@ -1,0 +1,132 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721URIStorageUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/AccessControlEnumerableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/CountersUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/structs/EnumerableSetUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/introspection/ERC165CheckerUpgradeable.sol";
+
+contract EACsCarbonCreditToken is Initializable, ERC721URIStorageUpgradeable, OwnableUpgradeable, AccessControlEnumerableUpgradeable, UUPSUpgradeable, ReentrancyGuardUpgradeable, PausableUpgradeable {
+    using CountersUpgradeable for CountersUpgradeable.Counter;
+    using EnumerableSetUpgradeable for EnumerableSetUpgradeable.UintSet;
+    using ERC165CheckerUpgradeable for address;
+
+    CountersUpgradeable.Counter private _tokenIdCounter;
+    EnumerableSetUpgradeable.UintSet private _validatedEACs;
+
+    bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
+    bytes32 public constant VERIFIER_ROLE = keccak256("VERIFIER_ROLE");
+    bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
+    bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
+    bytes32 public constant AUDITOR_ROLE = keccak256("AUDITOR_ROLE");
+
+    // Interface ID for ERC2981 - Royalties standard
+    bytes4 private constant _INTERFACE_ID_ERC2981 = 0x2a55205a;
+
+    struct EACData {
+        uint256 tokenId;
+        string hydrogenProductionMethod;
+        uint256 environmentalAttributes; // Environmental attributes quantified
+        string verificationDetails;
+        bool validated; // Indicates if the EAC has been validated
+    }
+
+    mapping(uint256 => EACData) private _eacsData;
+
+    event EACMinted(uint256 indexed tokenId, string hydrogenProductionMethod, uint256 environmentalAttributes, string verificationDetails, bool validated);
+    event EACUpdated(uint256 indexed tokenId, uint256 environmentalAttributes, string verificationDetails, bool validated);
+    event EACValidated(uint256 indexed tokenId, bool validated);
+
+    function initialize(string memory name, string memory symbol) public initializer {
+        __ERC721_init(name, symbol);
+        __ERC721URIStorage_init();
+        __Ownable_init();
+        __AccessControlEnumerable_init();
+        __UUPSUpgradeable_init();
+        __ReentrancyGuard_init();
+        __Pausable_init();
+
+        _setupRole(DEFAULT_ADMIN_ROLE, _msgSender());
+        _setupRole(MINTER_ROLE, _msgSender());
+        _setupRole(VERIFIER_ROLE, _msgSender());
+        _setupRole(PAUSER_ROLE, _msgSender());
+        _setupRole(UPGRADER_ROLE, _msgSender());
+        _setupRole(AUDITOR_ROLE, _msgSender());
+    }
+
+    function _authorizeUpgrade(address newImplementation) internal override onlyRole(UPGRADER_ROLE) {}
+
+    function mintEAC(address to, string memory uri, string memory hydrogenProductionMethod, uint256 environmentalAttributes, string memory verificationDetails, bool validated) public onlyRole(MINTER_ROLE) whenNotPaused {
+        require(environmentalAttributes > 0, "Environmental attributes must be positive");
+
+        _tokenIdCounter.increment();
+        uint256 tokenId = _tokenIdCounter.current();
+        _safeMint(to, tokenId);
+        _setTokenURI(tokenId, uri);
+
+        EACData memory newEACData = EACData({
+            tokenId: tokenId,
+            hydrogenProductionMethod: hydrogenProductionMethod,
+            environmentalAttributes: environmentalAttributes,
+            verificationDetails: verificationDetails,
+            validated: validated
+        });
+        _eacsData[tokenId] = newEACData;
+
+        if (validated) {
+            _validatedEACs.add(tokenId);
+        }
+
+        emit EACMinted(tokenId, hydrogenProductionMethod, environmentalAttributes, verificationDetails, validated);
+    }
+
+    function updateEAC(uint256 tokenId, uint256 newEnvironmentalAttributes, string memory newVerificationDetails, bool newValidated) public {
+        require(_exists(tokenId), "EAC does not exist");
+        require(hasRole(VERIFIER_ROLE, _msgSender()) || hasRole(AUDITOR_ROLE, _msgSender()), "Caller is not authorized to update EAC");
+
+        EACData storage eac = _eacsData[tokenId];
+        eac.environmentalAttributes = newEnvironmentalAttributes;
+        eac.verificationDetails = newVerificationDetails;
+        eac.validated = newValidated;
+
+        if (newValidated) {
+            _validatedEACs.add(tokenId);
+        } else {
+            _validatedEACs.remove(tokenId);
+        }
+
+        emit EACUpdated(tokenId, newEnvironmentalAttributes, newVerificationDetails, newValidated);
+    }
+
+    function validateEAC(uint256 tokenId, bool validated) public onlyRole(VERIFIER_ROLE) {
+        require(_exists(tokenId), "EAC does not exist");
+        EACData storage eac = _eacsData[tokenId];
+        eac.validated = validated;
+
+        if (validated) {
+            _validatedEACs.add(tokenId);
+        } else {
+            _validatedEACs.remove(tokenId);
+        }
+
+        emit EACValidated(tokenId, validated);
+    }
+
+    function getEACData(uint256 tokenId) public view returns (EACData memory) {
+        require(_exists(tokenId), "EAC does not exist");
+        return _eacsData[tokenId];
+    }
+
+    // Check for ERC2981 support
+    function supportsInterface(bytes4 interfaceId) public view virtual override returns (bool) {
+        return interfaceId == _INTERFACE_ID_ERC2981 || super.supportsInterface(interfaceId);
+    }
+
+    // Additional management and interaction functions...
+}
