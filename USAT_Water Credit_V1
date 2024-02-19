@@ -1,0 +1,87 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721URIStorageUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/AccessControlEnumerableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/CountersUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/cryptography/MerkleProofUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/StringsUpgradeable.sol";
+
+contract WaterCreditNFTUpgradeable is Initializable, ERC721URIStorageUpgradeable, AccessControlEnumerableUpgradeable, UUPSUpgradeable, ReentrancyGuardUpgradeable {
+    using CountersUpgradeable for CountersUpgradeable.Counter;
+    using MerkleProofUpgradeable for bytes32[];
+    using StringsUpgradeable for uint256;
+
+    Counters.Counter private _tokenIds;
+    bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
+    bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
+    bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
+    bytes32 private _merkleRoot;
+
+    string private _baseTokenURI;
+
+    event BaseURIChanged(string newBaseURI);
+    event WaterCreditMinted(uint256 indexed tokenId, address recipient, string tokenURI);
+    event BatchMintCompleted(address indexed recipient, uint256 startTokenId, uint256 endTokenId);
+
+    function initialize(string memory name, string memory symbol, string memory baseTokenURI) public initializer {
+        __ERC721URIStorage_init();
+        __ERC721_init(name, symbol);
+        __AccessControlEnumerable_init();
+        __UUPSUpgradeable_init();
+        __ReentrancyGuard_init();
+
+        _baseTokenURI = baseTokenURI;
+
+        _setupRole(DEFAULT_ADMIN_ROLE, _msgSender());
+        _setupRole(MINTER_ROLE, _msgSender());
+        _setupRole(UPGRADER_ROLE, _msgSender());
+        _setupRole(PAUSER_ROLE, _msgSender());
+    }
+
+    function _authorizeUpgrade(address newImplementation) internal override onlyRole(UPGRADER_ROLE) {}
+
+    function setBaseURI(string memory newBaseURI) public onlyRole(DEFAULT_ADMIN_ROLE) {
+        _baseTokenURI = newBaseURI;
+        emit BaseURIChanged(newBaseURI);
+    }
+
+    function mintWaterCredit(address recipient, string memory tokenURI, bytes32[] calldata merkleProof) public nonReentrant onlyRole(MINTER_ROLE) {
+        bytes32 leaf = keccak256(abi.encodePacked(recipient, tokenURI));
+        require(MerkleProofUpgradeable.verify(merkleProof, _merkleRoot, leaf), "Invalid proof.");
+
+        _tokenIds.increment();
+        uint256 newItemId = _tokenIds.current();
+        _mint(recipient, newItemId);
+        _setTokenURI(newItemId, tokenURI);
+
+        emit WaterCreditMinted(newItemId, recipient, tokenURI);
+    }
+
+    function batchMintWaterCredits(address recipient, uint256 quantity, string[] calldata tokenURIs, bytes32[][] calldata merkleProofs) external nonReentrant onlyRole(MINTER_ROLE) {
+        require(quantity == tokenURIs.length && quantity == merkleProofs.length, "Mismatch in quantity and URIs/proofs length.");
+        uint256 startTokenId = _tokenIds.current() + 1;
+
+        for (uint256 i = 0; i < quantity; i++) {
+            mintWaterCredit(recipient, tokenURIs[i], merkleProofs[i]);
+        }
+
+        uint256 endTokenId = _tokenIds.current();
+        emit BatchMintCompleted(recipient, startTokenId, endTokenId);
+    }
+
+    function setMerkleRoot(bytes32 merkleRoot) public onlyRole(DEFAULT_ADMIN_ROLE) {
+        _merkleRoot = merkleRoot;
+    }
+
+    function _baseURI() internal view override returns (string memory) {
+        return _baseTokenURI;
+    }
+
+    // Implement pause and unpause functionalities
+    // Implement safe transfer mechanisms to ensure water credit integrity
+    // Additional metadata and utility functions...
+}
