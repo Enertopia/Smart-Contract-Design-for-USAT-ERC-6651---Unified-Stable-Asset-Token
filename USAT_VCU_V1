@@ -1,0 +1,147 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721EnumerableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/AccessControlEnumerableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/CountersUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
+
+/**
+ * @title VCS Certified Carbon Credits (Upgradeable)
+ * @dev Comprehensive system for managing VCS Certified Carbon Credits with enhanced validation, governance, and trading features.
+ */
+contract VCSCarbonCreditsUpgradeable is Initializable, ERC721EnumerableUpgradeable, AccessControlEnumerableUpgradeable, PausableUpgradeable {
+    using CountersUpgradeable for Counters.Counter;
+
+    // Roles
+    bytes32 public constant VALIDATOR_ROLE = keccak256("VALIDATOR_ROLE");
+    bytes32 public constant GOVERNANCE_ROLE = keccak256("GOVERNANCE_ROLE");
+
+    CountersUpgradeable.Counter private _tokenIdCounter;
+
+    struct CarbonCredit {
+        uint256 metricTonsCO2e;
+        string projectIdentifier;
+        bool retired;
+    }
+
+    mapping(uint256 => CarbonCredit) private carbonCredits;
+
+    // Validation requests
+    struct ValidationRequest {
+        address requester;
+        bool approved;
+    }
+    mapping(uint256 => ValidationRequest[]) public validationRequests;
+
+    // Governance
+    struct Proposal {
+        string description;
+        bool executed;
+        uint256 votesFor;
+        uint256 votesAgainst;
+        mapping(address => bool) voted;
+    }
+    mapping(uint256 => Proposal) public proposals;
+    uint256 public proposalCount;
+
+    // Events
+    event CreditIssued(uint256 indexed tokenId, address indexed to, uint256 metricTonsCO2e, string projectIdentifier);
+    event CreditRetired(uint256 indexed tokenId);
+    event ValidationRequested(uint256 indexed tokenId, address indexed requester);
+    event ValidationApproved(uint256 indexed tokenId, address indexed validator);
+    event ProposalCreated(uint256 indexed proposalId, string description);
+    event VoteCasted(uint256 indexed proposalId, address indexed voter, bool vote);
+
+    function initialize() public initializer {
+        __ERC721Enumerable_init();
+        __AccessControlEnumerable_init();
+        __Pausable_init();
+        __ERC721_init("VCS Certified Carbon Credit", "VCSCC");
+
+        _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _setupRole(GOVERNANCE_ROLE, msg.sender);
+    }
+
+    function issueCredit(address to, uint256 metricTonsCO2e, string memory projectIdentifier) public onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(metricTonsCO2e > 0, "Carbon credit amount must be positive.");
+        
+        _tokenIdCounter.increment();
+        uint256 tokenId = _tokenIdCounter.current();
+        
+        _mint(to, tokenId);
+        carbonCredits[tokenId] = CarbonCredit({
+            metricTonsCO2e: metricTonsCO2e,
+            projectIdentifier: projectIdentifier,
+            retired: false
+        });
+
+        emit CreditIssued(tokenId, to, metricTonsCO2e, projectIdentifier);
+    }
+
+    function retireCredit(uint256 tokenId) public whenNotPaused {
+        require(ownerOf(tokenId) == msg.sender, "Only the owner can retire a credit.");
+        require(!carbonCredits[tokenId].retired, "Credit already retired.");
+
+        carbonCredits[tokenId].retired = true;
+
+        emit CreditRetired(tokenId);
+    }
+
+    function requestValidation(uint256 tokenId) public whenNotPaused {
+        require(ownerOf(tokenId) == msg.sender, "Only the owner can request validation.");
+        validationRequests[tokenId].push(ValidationRequest({
+            requester: msg.sender,
+            approved: false
+        }));
+
+        emit ValidationRequested(tokenId, msg.sender);
+    }
+
+    function approveValidation(uint256 tokenId, uint256 requestIndex) public onlyRole(VALIDATOR_ROLE) whenNotPaused {
+        ValidationRequest storage request = validationRequests[tokenId][requestIndex];
+        require(!request.approved, "Validation already approved.");
+        request.approved = true;
+
+        emit ValidationApproved(tokenId, msg.sender);
+    }
+
+    function createProposal(string memory description) public onlyRole(GOVERNANCE_ROLE) {
+        Proposal storage proposal = proposals[proposalCount++];
+        proposal.description = description;
+        proposal.executed = false;
+
+        emit ProposalCreated(proposalCount - 1, description);
+    }
+
+    function voteOnProposal(uint256 proposalId, bool support) public onlyRole(GOVERNANCE_ROLE) {
+        Proposal storage proposal = proposals[proposalId];
+        require(!proposal.voted[msg.sender], "Already voted.");
+
+        proposal.voted[msg.sender] = true;
+        if (support) {
+            proposal.votesFor++;
+        } else {
+            proposal.votesAgainst++;
+        }
+
+        emit VoteCasted(proposalId, msg.sender, support);
+    }
+
+    function _beforeTokenTransfer(address from, address to, uint256 tokenId) internal override(ERC721EnumerableUpgradeable) whenNotPaused {
+        super._beforeTokenTransfer(from, to, tokenId);
+        require(!carbonCredits[tokenId].retired, "Retired credits cannot be transferred.");
+    }
+
+    // Additional contract logic here...
+
+    // Pausable functionality
+    function pause() public onlyRole(DEFAULT_ADMIN_ROLE) {
+        _pause();
+    }
+
+    function unpause() public onlyRole(DEFAULT_ADMIN_ROLE) {
+        _unpause();
+    }
+}
