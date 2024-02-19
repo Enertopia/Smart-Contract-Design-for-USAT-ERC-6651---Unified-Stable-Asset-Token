@@ -1,0 +1,125 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721URIStorageUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721RoyaltyUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/AccessControlEnumerableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/CountersUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/math/SafeMathUpgradeable.sol";
+
+contract AdvancedBECCSCarbonCreditToken is Initializable, ERC721URIStorageUpgradeable, ERC721RoyaltyUpgradeable, OwnableUpgradeable, AccessControlEnumerableUpgradeable, UUPSUpgradeable, ReentrancyGuardUpgradeable, PausableUpgradeable {
+    using CountersUpgradeable for CountersUpgradeable.Counter;
+    using SafeMathUpgradeable for uint256;
+
+    CountersUpgradeable.Counter private _tokenIdCounter;
+
+    bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
+    bytes32 public constant VERIFIER_ROLE = keccak256("VERIFIER_ROLE");
+    bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
+    bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
+    bytes32 public constant PROJECT_ADMIN_ROLE = keccak256("PROJECT_ADMIN_ROLE");
+    bytes32 public constant AUDITOR_ROLE = keccak256("AUDITOR_ROLE");
+
+    struct BECCSCreditData {
+        uint256 tokenId;
+        uint256 timestamp;
+        string projectIdentifier;
+        uint256 bioenergyProduced; // Measured in MWh or equivalent
+        uint256 capturedCO2Tonnes; // Amount of CO2 captured and stored
+        string verificationDetails; // Details about project verification and certification
+        bool isActive; // Indicates if the project is currently active
+    }
+
+    mapping(uint256 => BECCSCreditData) private _beccsCreditsData;
+
+    event BECCSCreditMinted(uint256 indexed tokenId, string projectIdentifier, uint256 bioenergyProduced, uint256 capturedCO2Tonnes, string verificationDetails, bool isActive);
+    event BECCSCreditUpdated(uint256 indexed tokenId, uint256 bioenergyProduced, uint256 capturedCO2Tonnes, string verificationDetails, bool isActive);
+    event ProjectVerified(uint256 indexed tokenId, string verificationDetails, bool isActive);
+    event ProjectDeactivated(uint256 indexed tokenId);
+
+    function initialize(string memory name, string memory symbol) public initializer {
+        __ERC721_init(name, symbol);
+        __ERC721URIStorage_init();
+        __ERC721Royalty_init();
+        __Ownable_init();
+        __AccessControlEnumerable_init();
+        __UUPSUpgradeable_init();
+        __ReentrancyGuard_init();
+        __Pausable_init();
+
+        _setupRole(DEFAULT_ADMIN_ROLE, _msgSender());
+        _setupRole(MINTER_ROLE, _msgSender());
+        _setupRole(VERIFIER_ROLE, _msgSender());
+        _setupRole(PAUSER_ROLE, _msgSender());
+        _setupRole(UPGRADER_ROLE, _msgSender());
+        _setupRole(PROJECT_ADMIN_ROLE, _msgSender());
+        _setupRole(AUDITOR_ROLE, _msgSender());
+    }
+
+    function _authorizeUpgrade(address newImplementation) internal override onlyRole(UPGRADER_ROLE) {}
+
+    // Minting function that includes checks for bioenergy and CO2 capture metrics
+    function mintBECCSCredit(address to, string memory uri, string memory projectIdentifier, uint256 bioenergyProduced, uint256 capturedCO2Tonnes, string memory verificationDetails, bool isActive) public onlyRole(MINTER_ROLE) whenNotPaused {
+        require(bioenergyProduced > 0, "Bioenergy production must be positive");
+        require(capturedCO2Tonnes > 0, "Captured CO2 tonnes must be positive");
+
+        _tokenIdCounter.increment();
+        uint256 tokenId = _tokenIdCounter.current();
+        _safeMint(to, tokenId);
+        _setTokenURI(tokenId, uri);
+
+        BECCSCreditData memory newCreditData = BECCSCreditData({
+            tokenId: tokenId,
+            timestamp: block.timestamp,
+            projectIdentifier: projectIdentifier,
+            bioenergyProduced: bioenergyProduced,
+            capturedCO2Tonnes: capturedCO2Tonnes,
+            verificationDetails: verificationDetails,
+            isActive: isActive
+        });
+        _beccsCreditsData[tokenId] = newCreditData;
+
+        _setTokenRoyalty(tokenId, to, 500); // 5% royalty
+
+        emit BECCSCreditMinted(tokenId, projectIdentifier, bioenergyProduced, capturedCO2Tonnes, verificationDetails, isActive);
+    }
+
+    // Update function with additional checks for project activity
+    function updateBECCSCreditData(uint256 tokenId, uint256 newBioenergyProduced, uint256 newCapturedCO2Tonnes, string memory newVerificationDetails, bool newIsActive) public onlyRole(PROJECT_ADMIN_ROLE) {
+        require(_exists(tokenId), "Token does not exist");
+        BECCSCreditData storage credit = _beccsCreditsData[tokenId];
+        require(credit.isActive, "Project is not active");
+
+        credit.bioenergyProduced = newBioenergyProduced;
+        credit.capturedCO2Tonnes = newCapturedCO2Tonnes;
+        credit.verificationDetails = newVerificationDetails;
+        credit.isActive = newIsActive;
+
+        if (!newIsActive) {
+            emit ProjectDeactivated(tokenId);
+        } else {
+            emit BECCSCreditUpdated(tokenId, newBioenergyProduced, newCapturedCO2Tonnes, newVerificationDetails, newIsActive);
+        }
+    }
+
+    // Function to deactivate a project, making it ineligible for further updates
+    function deactivateProject(uint256 tokenId) public onlyRole(PROJECT_ADMIN_ROLE) {
+        require(_exists(tokenId), "Token does not exist");
+        BECCSCreditData storage credit = _beccsCreditsData[tokenId];
+        credit.isActive = false;
+
+        emit ProjectDeactivated(tokenId);
+    }
+
+    function getBECCSCreditData(uint256 tokenId) public view returns (BECCSCreditData memory) {
+        require(_exists(tokenId), "Token does not exist");
+        return _beccsCreditsData[tokenId];
+    }
+
+    // Implement additional functions for enhanced verification, auditing, and governance...
+}
