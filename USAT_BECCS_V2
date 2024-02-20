@@ -1,113 +1,118 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.23;
+pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721URIStorageUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721EnumerableUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/access/AccessControlEnumerableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721RoyaltyUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/AccessControlEnumerableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/CountersUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/utils/CountersUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/finance/PaymentSplitterUpgradeable.sol";
 
-contract BECCSNFT is Initializable, ERC721URIStorageUpgradeable, ERC721EnumerableUpgradeable, AccessControlEnumerableUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgradeable, PaymentSplitterUpgradeable {
+contract EnhancedBECCSCarbonCreditToken is Initializable, ERC721URIStorageUpgradeable, ERC721RoyaltyUpgradeable, AccessControlEnumerableUpgradeable, UUPSUpgradeable, ReentrancyGuardUpgradeable, PausableUpgradeable {
     using CountersUpgradeable for CountersUpgradeable.Counter;
 
     CountersUpgradeable.Counter private _tokenIdCounter;
-    // Additional state variables
-    mapping(uint256 => uint256) private _tokenSalePrice;
+
+    // Roles
+    bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
+    bytes32 public constant VERIFIER_ROLE = keccak256("VERIFIER_ROLE");
+    bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
+    bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
+    bytes32 public constant MARKETPLACE_MANAGER_ROLE = keccak256("MARKETPLACE_MANAGER_ROLE");
+
+    // Carbon Credit Token Data
+    struct BECCSCreditData {
+        uint256 bioenergyProduced;
+        uint256 capturedCO2Tonnes;
+        string projectIdentifier;
+        string verificationDetails;
+        bool isActive;
+    }
+
+    mapping(uint256 => BECCSCreditData) public beccsCreditsData;
+    mapping(uint256 => uint256) private _salePrices;
     mapping(uint256 => bool) private _listedForSale;
 
-    // Define roles
-    bytes32 public constant ROLE_ADMIN = DEFAULT_ADMIN_ROLE;
-    bytes32 public constant ROLE_MINTER = keccak256("ROLE_MINTER");
-    bytes32 public constant ROLE_METADATA_MANAGER = keccak256("ROLE_METADATA_MANAGER");
-    bytes32 public constant ROLE_VERIFIER = keccak256("ROLE_VERIFIER");
-    bytes32 public constant ROLE_MARKETPLACE_MANAGER = keccak256("ROLE_MARKETPLACE_MANAGER");
-
     // Events
-    event TokenListedForSale(uint256 indexed tokenId, uint256 salePrice);
-    event TokenSalePriceUpdated(uint256 indexed tokenId, uint256 newSalePrice);
-    event TokenUnlisted(uint256 indexed tokenId);
-    event TokenPurchased(uint256 indexed tokenId, address buyer, uint256 salePrice);
+    event CreditTokenMinted(uint256 indexed tokenId, BECCSCreditData creditData);
+    event CreditTokenUpdated(uint256 indexed tokenId, BECCSCreditData creditData);
+    event CreditTokenListed(uint256 indexed tokenId, uint256 salePrice);
+    event CreditTokenDelisted(uint256 indexed tokenId);
+    event CreditTokenSold(uint256 indexed tokenId, address buyer, uint256 salePrice);
 
-    // Marketplace share percentages for the platform and project owner
-    uint256 private constant PLATFORM_FEE_PERCENTAGE = 5;
-    uint256 private constant SELLER_FEE_PERCENTAGE = 95;
-
-    // PaymentSplitter to manage platform fees
-    address[] private _platformFeeReceivers;
-    uint256[] private _platformFeeShares;
-
-    function initialize(string memory name, string memory symbol, address[] memory platformFeeReceivers, uint256[] memory platformFeeShares) public initializer {
+    function initialize(string memory name, string memory symbol) public initializer {
         __ERC721_init(name, symbol);
-        __ERC721Enumerable_init();
         __ERC721URIStorage_init();
+        __ERC721Royalty_init();
         __AccessControlEnumerable_init();
-        __ReentrancyGuard_init();
         __UUPSUpgradeable_init();
-        __PaymentSplitter_init(platformFeeReceivers, platformFeeShares);
-        _setupRole(ROLE_ADMIN, _msgSender());
-        _setupRole(ROLE_MINTER, _msgSender());
-        _setupRole(ROLE_METADATA_MANAGER, _msgSender());
-        _setupRole(ROLE_VERIFIER, _msgSender());
-        _setupRole(ROLE_MARKETPLACE_MANAGER, _msgSender());
-        _platformFeeReceivers = platformFeeReceivers;
-        _platformFeeShares = platformFeeShares;
+        __ReentrancyGuard_init();
+        __Pausable_init();
+        _setupRole(DEFAULT_ADMIN_ROLE, _msgSender());
+        _setupRole(MINTER_ROLE, _msgSender());
+        _setupRole(VERIFIER_ROLE, _msgSender());
+        _setupRole(PAUSER_ROLE, _msgSender());
+        _setupRole(UPGRADER_ROLE, _msgSender());
+        _setupRole(MARKETPLACE_MANAGER_ROLE, _msgSender());
     }
 
-    // Listing NFTs for sale with verification check
-    function listTokenForSale(uint256 tokenId, uint256 salePrice) public onlyRole(ROLE_MARKETPLACE_MANAGER) {
-        require(_exists(tokenId), "BECCSNFT: Token does not exist");
-        require(ownerOf(tokenId) != address(0), "BECCSNFT: Owner cannot be the zero address");
-        require(_beccsData[tokenId].isActive, "BECCSNFT: Only active projects can be listed");
+    function mintCreditToken(address to, string memory uri, BECCSCreditData memory creditData) public onlyRole(MINTER_ROLE) {
+        require(creditData.bioenergyProduced > 0, "Bioenergy production must be positive");
+        require(creditData.capturedCO2Tonnes > 0, "Captured CO2 tonnes must be positive");
+        _tokenIdCounter.increment();
+        uint256 tokenId = _tokenIdCounter.current();
+        _safeMint(to, tokenId);
+        _setTokenURI(tokenId, uri);
+        beccsCreditsData[tokenId] = creditData;
+        _setTokenRoyalty(tokenId, to, 500); // Set a 5% royalty
+        emit CreditTokenMinted(tokenId, creditData);
+    }
 
-        _tokenSalePrice[tokenId] = salePrice;
+    function listCreditTokenForSale(uint256 tokenId, uint256 salePrice) public {
+        require(beccsCreditsData[tokenId].isActive, "Only active tokens can be listed");
+        require(ownerOf(tokenId) == msg.sender || hasRole(MARKETPLACE_MANAGER_ROLE, msg.sender), "Caller is not owner or marketplace manager");
+        _salePrices[tokenId] = salePrice;
         _listedForSale[tokenId] = true;
-
-        emit TokenListedForSale(tokenId, salePrice);
+        emit CreditTokenListed(tokenId, salePrice);
     }
 
-    // Updating the sale price
-    function updateTokenSalePrice(uint256 tokenId, uint256 newSalePrice) public onlyRole(ROLE_MARKETPLACE_MANAGER) {
-        require(_listedForSale[tokenId], "BECCSNFT: Token not listed for sale");
-        _tokenSalePrice[tokenId] = newSalePrice;
-
-        emit TokenSalePriceUpdated(tokenId, newSalePrice);
-    }
-
-    // Unlisting NFTs from sale
-    function unlistToken(uint256 tokenId) public onlyRole(ROLE_MARKETPLACE_MANAGER) {
-        require(_listedForSale[tokenId], "BECCSNFT: Token not listed for sale");
+    function delistCreditToken(uint256 tokenId) public {
+        require(_listedForSale[tokenId], "Token is not listed for sale");
+        require(ownerOf(tokenId) == msg.sender || hasRole(MARKETPLACE_MANAGER_ROLE, msg.sender), "Caller is not owner or marketplace manager");
         _listedForSale[tokenId] = false;
-
-        emit TokenUnlisted(tokenId);
+        emit CreditTokenDelisted(tokenId);
     }
 
-    // Buying listed NFTs
-    function buyToken(uint256 tokenId) public payable nonReentrant {
-        require(_listedForSale[tokenId], "BECCSNFT: Token not listed for sale");
-        uint256 salePrice = _tokenSalePrice[tokenId];
-        require(msg.value >= salePrice, "BECCSNFT: Insufficient payment");
-
+    function buyCreditToken(uint256 tokenId) public payable nonReentrant whenNotPaused {
+        require(_listedForSale[tokenId], "Token is not listed for sale");
+        uint256 salePrice = _salePrices[tokenId];
+        require(msg.value >= salePrice, "Insufficient funds sent");
         address seller = ownerOf(tokenId);
         _transfer(seller, msg.sender, tokenId);
         _listedForSale[tokenId] = false;
-
-        // Split payment between seller and platform
-        uint256 platformFee = (salePrice * PLATFORM_FEE_PERCENTAGE) / 100;
-        uint256 sellerProceeds = salePrice - platformFee;
-
-        // Transfer fees to platform and seller
-        payable(seller).transfer(sellerProceeds);
-        for (uint256 i = 0; i < _platformFeeReceivers.length; i++) {
-            payable(_platformFeeReceivers[i]).transfer((platformFee * _platformFeeShares[i]) / 100);
-        }
-
-        emit TokenPurchased(tokenId, msg.sender, salePrice);
+        payable(seller).transfer(msg.value);
+        emit CreditTokenSold(tokenId, msg.sender, salePrice);
     }
 
-    // Additional utility functions and overrides as necessary...
+    function updateCreditTokenData(uint256 tokenId, BECCSCreditData memory creditData) public onlyRole(VERIFIER_ROLE) {
+        require(_exists(tokenId), "Token does not exist");
+        beccsCreditsData[tokenId] = creditData;
+        emit CreditTokenUpdated(tokenId, creditData);
+    }
 
-    function _authorizeUpgrade(address newImplementation) internal override onlyRole(ROLE_ADMIN) {}
+    function _authorizeUpgrade(address newImplementation) internal override onlyRole(UPGRADER_ROLE) {}
+
+    // Additional functions here...
+
+    function pause() public onlyRole(PAUSER_ROLE) {
+        _pause();
+    }
+
+    function unpause() public onlyRole(PAUSER_ROLE) {
+        _unpause();
+    }
+
+    // Override functions as necessary...
 }
