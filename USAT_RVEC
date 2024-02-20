@@ -1,0 +1,86 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721URIStorageUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/AccessControlEnumerableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/CountersUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+
+contract USATRVEC is Initializable, ERC721URIStorageUpgradeable, AccessControlEnumerableUpgradeable, UUPSUpgradeable, ReentrancyGuardUpgradeable, PausableUpgradeable {
+    using CountersUpgradeable for CountersUpgradeable.Counter;
+
+    CountersUpgradeable.Counter private _tokenIdCounter;
+
+    // Define roles
+    bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
+    bytes32 public constant VERIFIER_ROLE = keccak256("VERIFIER_ROLE");
+    bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
+    bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
+
+    // Struct for renewable energy credit data
+    struct RenewableEnergyCreditData {
+        uint256 energyProduced; // Measured in MWh
+        string sourceType; // E.g., Solar, Wind, Hydro
+        string projectIdentifier; // Unique identifier for the project
+        string verificationDetails; // Details about verification and certification
+        bool isActive; // Indicates if the credit is active
+    }
+
+    mapping(uint256 => RenewableEnergyCreditData) public renewableCreditsData;
+
+    // Event declarations
+    event RenewableCreditMinted(uint256 indexed tokenId, RenewableEnergyCreditData creditData);
+    event RenewableCreditUpdated(uint256 indexed tokenId, RenewableEnergyCreditData creditData);
+
+    function initialize(string memory name, string memory symbol) public initializer {
+        __ERC721_init(name, symbol);
+        __ERC721URIStorage_init();
+        __AccessControlEnumerable_init();
+        __UUPSUpgradeable_init();
+        __ReentrancyGuard_init();
+        __Pausable_init();
+        _setupRole(DEFAULT_ADMIN_ROLE, _msgSender());
+        _setupRole(MINTER_ROLE, _msgSender());
+        _setupRole(VERIFIER_ROLE, _msgSender());
+        _setupRole(PAUSER_ROLE, _msgSender());
+        _setupRole(UPGRADER_ROLE, _msgSender());
+    }
+
+    // Minting function for renewable energy credits
+    function mintRenewableCredit(address to, string memory uri, RenewableEnergyCreditData memory creditData) public onlyRole(MINTER_ROLE) {
+        require(creditData.energyProduced > 0, "Energy production must be positive");
+        _tokenIdCounter.increment();
+        uint256 tokenId = _tokenIdCounter.current();
+        _safeMint(to, tokenId);
+        _setTokenURI(tokenId, uri);
+        renewableCreditsData[tokenId] = creditData;
+        emit RenewableCreditMinted(tokenId, creditData);
+    }
+
+    // Function to update renewable energy credit data
+    function updateRenewableCreditData(uint256 tokenId, RenewableEnergyCreditData memory creditData) public onlyRole(VERIFIER_ROLE) {
+        require(_exists(tokenId), "ERC721Metadata: URI set of nonexistent token");
+        renewableCreditsData[tokenId] = creditData;
+        emit RenewableCreditUpdated(tokenId, creditData);
+    }
+
+    // Implement pause and unpause functionalities
+    function pause() public onlyRole(PAUSER_ROLE) {
+        _pause();
+    }
+
+    function unpause() public onlyRole(PAUSER_ROLE) {
+        _unpause();
+    }
+
+    // Authorize upgrade function for UUPS proxy pattern
+    function _authorizeUpgrade(address newImplementation) internal override onlyRole(UPGRADER_ROLE) {}
+
+    // Override required by solidity for imports
+    function _beforeTokenTransfer(address from, address to, uint256 tokenId) internal override(ERC721URIStorageUpgradeable, ERC721Upgradeable) whenNotPaused {
+        super._beforeTokenTransfer(from, to, tokenId);
+    }
+}
