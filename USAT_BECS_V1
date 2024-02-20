@@ -1,0 +1,113 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.23;
+
+import "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721URIStorageUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721EnumerableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/AccessControlEnumerableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/CountersUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/finance/PaymentSplitterUpgradeable.sol";
+
+contract BECCSNFT is Initializable, ERC721URIStorageUpgradeable, ERC721EnumerableUpgradeable, AccessControlEnumerableUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgradeable, PaymentSplitterUpgradeable {
+    using CountersUpgradeable for CountersUpgradeable.Counter;
+
+    CountersUpgradeable.Counter private _tokenIdCounter;
+    // Additional state variables
+    mapping(uint256 => uint256) private _tokenSalePrice;
+    mapping(uint256 => bool) private _listedForSale;
+
+    // Define roles
+    bytes32 public constant ROLE_ADMIN = DEFAULT_ADMIN_ROLE;
+    bytes32 public constant ROLE_MINTER = keccak256("ROLE_MINTER");
+    bytes32 public constant ROLE_METADATA_MANAGER = keccak256("ROLE_METADATA_MANAGER");
+    bytes32 public constant ROLE_VERIFIER = keccak256("ROLE_VERIFIER");
+    bytes32 public constant ROLE_MARKETPLACE_MANAGER = keccak256("ROLE_MARKETPLACE_MANAGER");
+
+    // Events
+    event TokenListedForSale(uint256 indexed tokenId, uint256 salePrice);
+    event TokenSalePriceUpdated(uint256 indexed tokenId, uint256 newSalePrice);
+    event TokenUnlisted(uint256 indexed tokenId);
+    event TokenPurchased(uint256 indexed tokenId, address buyer, uint256 salePrice);
+
+    // Marketplace share percentages for the platform and project owner
+    uint256 private constant PLATFORM_FEE_PERCENTAGE = 5;
+    uint256 private constant SELLER_FEE_PERCENTAGE = 95;
+
+    // PaymentSplitter to manage platform fees
+    address[] private _platformFeeReceivers;
+    uint256[] private _platformFeeShares;
+
+    function initialize(string memory name, string memory symbol, address[] memory platformFeeReceivers, uint256[] memory platformFeeShares) public initializer {
+        __ERC721_init(name, symbol);
+        __ERC721Enumerable_init();
+        __ERC721URIStorage_init();
+        __AccessControlEnumerable_init();
+        __ReentrancyGuard_init();
+        __UUPSUpgradeable_init();
+        __PaymentSplitter_init(platformFeeReceivers, platformFeeShares);
+        _setupRole(ROLE_ADMIN, _msgSender());
+        _setupRole(ROLE_MINTER, _msgSender());
+        _setupRole(ROLE_METADATA_MANAGER, _msgSender());
+        _setupRole(ROLE_VERIFIER, _msgSender());
+        _setupRole(ROLE_MARKETPLACE_MANAGER, _msgSender());
+        _platformFeeReceivers = platformFeeReceivers;
+        _platformFeeShares = platformFeeShares;
+    }
+
+    // Listing NFTs for sale with verification check
+    function listTokenForSale(uint256 tokenId, uint256 salePrice) public onlyRole(ROLE_MARKETPLACE_MANAGER) {
+        require(_exists(tokenId), "BECCSNFT: Token does not exist");
+        require(ownerOf(tokenId) != address(0), "BECCSNFT: Owner cannot be the zero address");
+        require(_beccsData[tokenId].isActive, "BECCSNFT: Only active projects can be listed");
+
+        _tokenSalePrice[tokenId] = salePrice;
+        _listedForSale[tokenId] = true;
+
+        emit TokenListedForSale(tokenId, salePrice);
+    }
+
+    // Updating the sale price
+    function updateTokenSalePrice(uint256 tokenId, uint256 newSalePrice) public onlyRole(ROLE_MARKETPLACE_MANAGER) {
+        require(_listedForSale[tokenId], "BECCSNFT: Token not listed for sale");
+        _tokenSalePrice[tokenId] = newSalePrice;
+
+        emit TokenSalePriceUpdated(tokenId, newSalePrice);
+    }
+
+    // Unlisting NFTs from sale
+    function unlistToken(uint256 tokenId) public onlyRole(ROLE_MARKETPLACE_MANAGER) {
+        require(_listedForSale[tokenId], "BECCSNFT: Token not listed for sale");
+        _listedForSale[tokenId] = false;
+
+        emit TokenUnlisted(tokenId);
+    }
+
+    // Buying listed NFTs
+    function buyToken(uint256 tokenId) public payable nonReentrant {
+        require(_listedForSale[tokenId], "BECCSNFT: Token not listed for sale");
+        uint256 salePrice = _tokenSalePrice[tokenId];
+        require(msg.value >= salePrice, "BECCSNFT: Insufficient payment");
+
+        address seller = ownerOf(tokenId);
+        _transfer(seller, msg.sender, tokenId);
+        _listedForSale[tokenId] = false;
+
+        // Split payment between seller and platform
+        uint256 platformFee = (salePrice * PLATFORM_FEE_PERCENTAGE) / 100;
+        uint256 sellerProceeds = salePrice - platformFee;
+
+        // Transfer fees to platform and seller
+        payable(seller).transfer(sellerProceeds);
+        for (uint256 i = 0; i < _platformFeeReceivers.length; i++) {
+            payable(_platformFeeReceivers[i]).transfer((platformFee * _platformFeeShares[i]) / 100);
+        }
+
+        emit TokenPurchased(tokenId, msg.sender, salePrice);
+    }
+
+    // Additional utility functions and overrides as necessary...
+
+    function _authorizeUpgrade(address newImplementation) internal override onlyRole(ROLE_ADMIN) {}
+}
